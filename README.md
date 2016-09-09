@@ -28,7 +28,7 @@ and core.async channels, they still compose, but supervision will fail in
 ## Usage
 
 Add this to your project.
-[![Clojars Project](http://clojars.org/replikativ/superv.async/latest-version.svg)](http://clojars.org/io.replikativ/superv.async)
+[![Clojars Project](http://clojars.org/io.replikativ/superv.async/latest-version.svg)](http://clojars.org/io.replikativ/superv.async)
 
 ### Exception Handling
 
