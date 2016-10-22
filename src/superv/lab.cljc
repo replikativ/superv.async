@@ -240,7 +240,8 @@
               (if e
                 (do
                   (when-not (= (:type (ex-data e)) :aborted)
-                    (log-fn :info (pr-str "STALE Error in restarting supervisor:" e)))
+                    (log-fn :info {:event :stale-error-in-supervisor
+                                   :error e}))
                   (-free-exception s e)
                   (put! err-ch e))
                 (recur)))))
@@ -269,12 +270,11 @@
                       (not (or (not error-fn) (error-fn e?)))
                       (not (pos? retries)))
                 (do
-                  (log-fn :error (pr-str "passing error: " e?))
+                  (log-fn :error {:event :passing-error :error e?})
                   (put! out-ch e?)
                   (close! out-ch))
                 (do (<! (timeout delay))
-                    (log-fn :debug (str "retrying because of " e?
-                                        " for further " retries " times"))
+                    (log-fn :debug {:event :retry :error e? :further-retries retries})
                     (recur (dec retries)))))
             (do (put! out-ch (<! res-ch))
                 (close! out-ch))))))

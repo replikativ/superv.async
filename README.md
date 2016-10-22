@@ -147,6 +147,10 @@ boundaries like this:
 `pmap>>` lets you apply a function to channel's output in parallel,
 returning a new channel with results.
 
+## TODO
+
+- restructure namespaces, group supervisor stuff
+
 
 ## License
 
