@@ -14,7 +14,7 @@ and includes a number of convenience functions and macros. This library is a
 fork of [full.async](https://github.com/fullcontact/full.monty). The original
 attempt to merge this work with it
 failed
-[due to the limitations of a binding like approach](https://github.com/fullcontact/full.async).
+[due to the limitations of a dynamic binding approach](https://github.com/fullcontact/full.async).
 The fork became reasonable, because full.async mostly deals with convenience
 functions, but it is not as radically focused on proper error handling. Since
 the error handling cannot happen through a transparent dynamic binding, some
@@ -23,7 +23,7 @@ lexically. If binding support comes to ClojureScript for asynchronous contexts
 the projects might merge again. The binding approach also has a performance
 penalty though. Since the boundary of both error handling libraries is the
 exception mechanism and core.async channels, they still compose, but supervision
-will will not compose with `full.async` contexts.
+will not compose with `full.async` contexts.
 
 
 ## Usage
