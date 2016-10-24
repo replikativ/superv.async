@@ -5,8 +5,8 @@
 Errors happen, and proper error handling cannot be bolted on top of subsystems.
 This library draws on
 [the Erlang philosophy](http://erlang.org/download/armstrong_thesis_2003.pdf) of
-error handling to help building robust distributed systems that deal with errors
-by default.
+error handling to help [building robust distributed systems that deal with errors
+by default](https://whilo.github.io/org/2016/03/10/error-handling1.html).
 
 This is a Clojure(Script) library that
 extends [core.async](https://github.com/clojure/core.async) with error handling
