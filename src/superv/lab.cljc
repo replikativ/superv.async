@@ -230,7 +230,7 @@
             res-ch (start-fn s)
             stale-timeout 1000]
 
-        (go-loop [] ;; todo terminate loop
+        (go-loop [] 
           (when-not (async/poll! ab-ch)
             (<! (timeout stale-timeout))
             (let [[[e _]] (filter (fn [[k v]]

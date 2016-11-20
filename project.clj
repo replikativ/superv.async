@@ -13,10 +13,6 @@
                  [org.clojure/clojurescript "1.8.51"]
                  [org.clojure/core.async "0.2.391"]]
 
-  :aot :all
-
-  :main superv.async
-
   :plugins [[lein-midje "3.1.3"]
             [lein-cljsbuild "1.1.4"]]
 
