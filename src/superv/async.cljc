@@ -120,7 +120,9 @@
   this exception and deal with it! This means you need to take the
   result from the cannel at some point."
      [S & body]
-     `(let [id# (-register-go ~S (quote ~body))]
+     `(let [err# (when-not (extends? PSupervisor (type ~S))
+                   (throw (IllegalArgumentException. "First argument is not a supervisor.")))
+            id# (-register-go ~S (quote ~body))]
         ;; if-cljs is sensible to symbol pass-through it is not yet
         ;; clear to me why (if-cljs `cljs.core.async/go `async/go)
         ;; does not work
@@ -143,6 +145,8 @@
                        e#)
                      (finally
                        (-unregister-go ~S id#))))))))
+
+
 
 
 #?(:clj

@@ -250,9 +250,11 @@
           (if-not (and (empty? @(:registered s))
                        (empty? @(:pending-exceptions s)))
             (do
-              (when (= (mod i 100) 0)
+              (when (= (mod i 1000) 0) ;; every 100 seconds
                 #_(log-fn :debug
-                        ["waiting for go-routines: "
+                        ["waiting for go-routines to restart: "
+                         #?(:clj (java.util.Date.)
+                            :cljs (js/Date.))
                          @(:registered s)
                          @(:pending-exceptions s)]))
               (<! (timeout 100))

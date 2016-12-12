@@ -131,6 +131,10 @@
                         :default (ex-info "foo" {}))))
  => (throws Exception))
 
+(fact
+ (<?? (go-try :foo 1))
+ => (throws Exception))
+
 ;; thread-try
 (fact
  (<?? S (thread-try S 42))
