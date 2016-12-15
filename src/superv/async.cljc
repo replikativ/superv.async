@@ -119,6 +119,7 @@
   exception if an exception is thrown. You are responsible to take
   this exception and deal with it! This means you need to take the
   result from the cannel at some point."
+     {:style/indent 1}
      [S & body]
      `(let [err# (when-not (extends? PSupervisor (type ~S))
                    (throw (IllegalArgumentException. "First argument is not a supervisor.")))
@@ -150,7 +151,10 @@
 
 
 #?(:clj
-   (defmacro go-loop-try [S bindings & body]
+   (defmacro go-loop-try
+     "Loop binding for go-try."
+     {:style/indent 1}
+     [S bindings & body]
      `(go-try ~S (loop ~bindings ~@body))))
 
 
@@ -159,6 +163,7 @@
      "Asynchronously executes the body in a thread. Returns a channel
   which will receive the result of the body or the exception if one is
   thrown. "
+     {:style/indent 1}
      [S & body]
      `(if-cljs (throw (ex-info "thread-try is not supported in cljs." {:code body}))
                (let [id# (-register-go ~S (quote ~body))]

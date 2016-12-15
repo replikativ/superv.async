@@ -60,6 +60,7 @@
      "Asynchronously executes the body in a go block. Returns a channel which
   will receive the result of the body when completed or nil if an
   exception is thrown. Communicates exceptions via supervisor channels."
+     {:style/indent 1}
      [S & body]
      `(let [id# (-register-go ~S (quote ~body))]
         (if-cljs (cljs.core.async.macros/go
@@ -80,7 +81,10 @@
                        (-unregister-go ~S id#))))))))
 
 #?(:clj
-   (defmacro go-loop-super [S bindings & body]
+   (defmacro go-loop-super
+     "Supervised loop binding."
+     {:style/indent 1}
+     [S bindings & body]
      `(go-super ~S (loop ~bindings ~@body))))
 
 #?(:clj
@@ -89,6 +93,7 @@
   which will receive the result of the body when completed or nil if
   an exception is thrown. Communicates exceptions via supervisor
   channels."
+     {:style/indent 1}
      [S & body]
      `(if-cljs (throw (ex-info "thread-super not supported in cljs." {:code body}))
                (let [id# (-register-go ~S (quote ~body))]
