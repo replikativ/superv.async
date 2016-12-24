@@ -83,7 +83,7 @@
 #?(:clj
    (defmacro go-loop-super
      "Supervised loop binding."
-     {:style/indent 1}
+     {:style/indent 2}
      [S bindings & body]
      `(go-super ~S (loop ~bindings ~@body))))
 
