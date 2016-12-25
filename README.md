@@ -66,8 +66,7 @@ We decided to form a supervision context in which exceptions thrown in
 concurrent parts get reported to a supervisor:
 
 ```clojure
-(require '[superv.async :refer [S go-try]]
-         '[superv.lab :refer [restarting-supervisor on-abort]])
+(require '[superv.async :refer [S go-try restarting-supervisor on-abort]])
 
 (let [try-fn (fn [S] (go-try S (throw (ex-info "stale" {}))))
       start-fn (fn [rs] ;; will be called again on retries
@@ -169,13 +168,12 @@ input are prefixed with `<<` (for example `<<?`).
 
 ## Change Log
 
-See [CHANGES.md](CHANGES).
+See [CHANGES](CHANGES.md).
 
 
 ## TODO
 
-- add better than the JVM/JS subtyping exception dispatch to the supervisor
-- restructure namespaces, group supervisor stuff
+- add spec signatures
 
 
 ## License
