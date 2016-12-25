@@ -1,4 +1,4 @@
-# superv.async [![CircleCI](https://circleci.com/gh/replikativ/superv.async.svg?style=shield&circle-token=8a654d85a02df68beb15a44d3505ff1e83ddc036)](https://circleci.com/gh/replikativ/superv.async)
+# superv.async [![CircleCI](https://circleci.com/gh/replikativ/hasch.svg?style=shield&circle-token=8a654d85a02df68beb15a44d3505ff1e83ddc036)](https://circleci.com/gh/replikativ/hasch)
 
 *Let it crash.* The Erlang approach to build reliable systems.
 
