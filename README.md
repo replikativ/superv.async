@@ -1,4 +1,4 @@
-# superv.async
+# superv.async [![CircleCI](https://circleci.com/gh/replikativ/superv.async.svg?style=shield&circle-token=8a654d85a02df68beb15a44d3505ff1e83ddc036)](https://circleci.com/gh/replikativ/superv.async)
 
 *Let it crash.* The Erlang approach to build reliable systems.
 
@@ -154,6 +154,24 @@ boundaries like this, which is much less succinct:
 `pmap>>` lets you apply a function to channel's output in parallel,
 returning a new channel with results.
 
+## Conventions
+
+For readability of code, `superv.asznc` follows these conventions from
+`full.async`:
+* Async operators that throw exceptions use `?` in place of `!`, for example
+throwing counterpart of `<!` is `<?`.
+* Functions that return channel that will contain zero or one value (typically
+result of `go` blocks) are sufixed with `>`. Similarly operators that expect
+zero/single value channel as input are prefixed with `<` (for example `<?`).
+* Functions that return channel that will contain zero to many values are
+sufixed with `>>`. Similarly operators that expect zero to many value channel as
+input are prefixed with `<<` (for example `<<?`).
+
+## Change Log
+
+See [CHANGES.md](CHANGES).
+
+
 ## TODO
 
 - add better than the JVM/JS subtyping exception dispatch to the supervisor
@@ -162,4 +180,4 @@ returning a new channel with results.
 
 ## License
 
-Copyright (C) 2015-2016 Christian Weilbach, 2015 FullContact. Distributed under the Eclipse Public License, the same as Clojure.
+Copyright (C) 2015-2016 Christian Weilbach, 2016 FullContact. Distributed under the Eclipse Public License, the same as Clojure.
