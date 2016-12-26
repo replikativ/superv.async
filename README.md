@@ -55,7 +55,7 @@ of goroutines because you can just rethrow the exceptions on the higher levels
 of the call-stack. This fails for concurrent goroutines like go-loops or
 background tasks, which are often the long-term purpose of the introduction of
 asynchronous programming in the first place. To handle these concurrent
-situation we have introduced an Erlang inspired supervision concept.
+situations we have introduced an Erlang inspired supervision concept.
 
 Two requirements for robust systems in Erlang are:
 
@@ -155,7 +155,7 @@ returning a new channel with results.
 
 ## Conventions
 
-For readability of code, `superv.asznc` follows these conventions from
+For readability of code, `superv.async` follows these conventions from
 `full.async`:
 * Async operators that throw exceptions use `?` in place of `!`, for example
 throwing counterpart of `<!` is `<?`.
