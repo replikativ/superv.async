@@ -10,7 +10,8 @@
                       :as async])
             [clojure.spec :as s]
             #?(:cljs (cljs.core.async.impl.protocols :refer [ReadPort])))
-  #?(:cljs (:require-macros [superv.async :refer [wrap-abort! >? <? go-try go-loop-try]]
+  #?(:cljs (:require-macros [superv.async :refer [wrap-abort! >? <? go-try go-loop-try
+                                                  on-abort go-super go-loop-super go-for]]
                             [cljs.core.async.macros :refer [go go-loop alt!]]))
   #?(:clj (:import (clojure.core.async.impl.protocols ReadPort))))
 
@@ -39,9 +40,11 @@
   (-free-exception [this e]))
 
 
-(defn now []
-  #?(:clj (java.util.Date.)
-     :cljs (js/Date.)))
+#?(:clj
+   (defn ^java.util.Date now []
+     (java.util.Date.))
+   :cljs (defn now []
+           (js/Date.))) 
 
 (defrecord TrackingSupervisor [error abort registered pending-exceptions]
   PSupervisor
@@ -61,19 +64,18 @@
 #?(:cljs (enable-console-print!))
 
 (defn simple-supervisor
-  "A simple supervisor which deals with errors through callbacks."
+  "A simple supervisor which deals with errors through callbacks. You need to
+  close its abort channel manually if you want the context to stop. It is
+  supposed to be used at a boundary to an unsupervised system. If you want
+  strong supervision, use the restarting-supervisor instead."
   [& {:keys [stale-timeout error-fn pending-fn]
       :or {stale-timeout (* 10 1000)
            error-fn (fn [e] (println "Supervisor:" e
-                                     #?(:cljs (.-stack e))))
-           pending-fn (fn [e]
-                        (println "Supervisor detected stale error:" e
-                                 #?(:cljs (.-stack e))))}}]
-  (let [s (assoc (map->TrackingSupervisor {:error (chan)
-                                           :abort (chan)
-                                           :registered (atom {})
-                                           :pending-exceptions (atom {})})
-                 :global? true)
+                                     #?(:cljs (.-stack e))))}}]
+  (let [s (map->TrackingSupervisor {:error (chan)
+                                    :abort (chan)
+                                    :registered (atom {})
+                                    :pending-exceptions (atom {})})
         err-ch (:error s)]
 
     ;; avoid using go-loops with aot here
@@ -83,11 +85,12 @@
     ((fn pending [_]
        (let [[[e _]] (filter (fn [[k v]]
                                (> (- (.getTime (now)) stale-timeout)
-                                  (.getTime v)))
+                                  #?(:clj (.getTime ^java.util.Date v)
+                                     :cljs (.getTime v))))
                              @(:pending-exceptions s))]
 
          (when e
-           (pending-fn e)
+           (error-fn e)
            (-free-exception s e))
          (take! (timeout stale-timeout) pending))) nil)
     s))
@@ -121,7 +124,7 @@
     (throw (ex-info "First argument is not a supervisor."
                     {:argument x}))))
 
-(defn channel?
+(defn chan?
   "Here until http://dev.clojure.org/jira/browse/ASYNC-74 is resolved."
   [x]
   (satisfies? #?(:clj clojure.core.async.impl.protocols/ReadPort
@@ -134,7 +137,8 @@
   which will receive the result of the body when completed or the
   exception if an exception is thrown. You are responsible to take
   this exception and deal with it! This means you need to take the
-  result from the cannel at some point."
+  result from the cannel at some point or the supervisor will take
+  care of the error."
      {:style/indent 1}
      [S & body]
      `(let [c# (check-supervisor S)
@@ -530,15 +534,13 @@ Throws if any result is an exception or the context has been aborted."
     out))
 
 
-;; former lab namespace
-
-
 #?(:clj
    (defmacro on-abort
      "Executes body if the supervisor aborts the context. You *need* to
   use this to free up any external resources. This is necessary,
   because our error handling is not part of the runtime which could
   free the resources for us as is the case with the Erlang VM."
+     {:style/indent 1}
      [S & body]
      `(if-cljs
        (go-try ~S
@@ -554,8 +556,10 @@ Throws if any result is an exception or the context has been aborted."
   ([S mult ch]
    (tap S mult ch false))
   ([S mult ch close?]
-   (on-abort S (close! ch)
-             (go-try (while (<! ch))))
+   (on-abort S
+     (close! ch)
+     ;; flush
+     (go-try (while (<! ch))))
    (async/tap mult ch close?)))
 
 (defn sub
@@ -564,7 +568,10 @@ Throws if any result is an exception or the context has been aborted."
   ([S p topic ch]
    (sub S p topic ch false))
   ([S p topic ch close?]
-   (on-abort S (close! ch) (go-try S (while (<! ch))))
+   (on-abort S
+     (close! ch)
+     ;; flush
+     (go-try S (while (<! ch))))
    (async/sub p topic ch close?)))
 
 
@@ -577,22 +584,23 @@ Throws if any result is an exception or the context has been aborted."
      [S & body]
      `(let [c# (check-supervisor S)
             id# (-register-go ~S (quote ~body))]
-        (if-cljs (cljs.core.async.macros/go
-                   (try
-                     ~@body
-                     (catch js/Error e#
-                       (let [err-ch# (-error ~S)]
-                         (cljs.core.async/>! err-ch# e#)))
-                     (finally
-                       (-unregister-go ~S id#))))
-                 (go
-                   (try
-                     ~@body
-                     (catch Exception e#
-                       (let [err-ch# (-error ~S)]
-                         (>! err-ch# e#)))
-                     (finally
-                       (-unregister-go ~S id#))))))))
+        (if-cljs
+         (cljs.core.async.macros/go
+           (try
+             ~@body
+             (catch js/Error e#
+               (let [err-ch# (-error ~S)]
+                 (cljs.core.async/>! err-ch# e#)))
+             (finally
+               (-unregister-go ~S id#))))
+         (go
+           (try
+             ~@body
+             (catch Exception e#
+               (let [err-ch# (-error ~S)]
+                 (>! err-ch# e#)))
+             (finally
+               (-unregister-go ~S id#))))))))
 
 #?(:clj
    (defmacro go-loop-super
@@ -609,18 +617,19 @@ Throws if any result is an exception or the context has been aborted."
   channels."
      {:style/indent 1}
      [S & body]
-     `(if-cljs (throw (ex-info "thread-super not supported in cljs." {:code body}))
-               (let [id# (-register-go ~S (quote ~body))]
-                 (thread
-                   (try
-                     ~@body
-                     (catch #?(:clj Exception :cljs js/Error) e#
-                       ;; bug in core.async:
-                       ;; No method in multimethod '-item-to-ssa' for dispatch value: :protocol-invoke
-                       (let [err-ch# (-error ~S)]
-                         (put! err-ch# e#)))
-                     (finally
-                       (-unregister-go ~S id#))))))))
+     `(if-cljs
+       (throw (ex-info "thread-super not supported in cljs." {:code body}))
+       (let [id# (-register-go ~S (quote ~body))]
+         (thread
+           (try
+             ~@body
+             (catch #?(:clj Exception :cljs js/Error) e#
+                 ;; bug in core.async:
+                 ;; No method in multimethod '-item-to-ssa' for dispatch value: :protocol-invoke
+                 (let [err-ch# (-error ~S)]
+                   (put! err-ch# e#)))
+             (finally
+               (-unregister-go ~S id#))))))))
 
 
 (defn chan-super
@@ -716,10 +725,14 @@ Throws if any result is an exception or the context has been aborted."
 
 
 (defn restarting-supervisor
-  "Starts a subsystem with supervised go-routines initialized by
-  start-fn. Restarts the system on error for retries times with a
-  potential delay in milliseconds, an optional error-fn predicate
-  determining the retry and a optional filter by exception type.
+  "Starts a subsystem with supervised go-routines initialized by start-fn.
+  Restarts the system on error for retries times with a potential delay in
+  milliseconds, an optional error-fn predicate determining the retry and a
+  optional filter by exception type. You can optionally pass a supervisor to
+  form a supervision tree. Whenever this passed supervisor aborts the context,
+  this supervisor will close as well. You still need to block on the result of
+  this supervisor if you want a clean synchronized shutdown. The concept is
+  similar to http://learnyousomeerlang.com/supervisors
 
   All blocking channel ops in the subroutines (supervised context) are
   aborted with an exception on error to force total termination. The
@@ -728,7 +741,8 @@ Throws if any result is an exception or the context has been aborted."
 
   If exceptions are not taken from go-try channels (by error), they
   become stale after stale-timeout and trigger a restart. "
-  [start-fn & {:keys [retries delay error-fn exception stale-timeout log-fn]
+  [start-fn & {:keys [retries delay error-fn exception stale-timeout log-fn
+                      supervisor]
                :or {retries #?(:clj Long/MAX_VALUE :cljs js/Infinity)
                     delay 0
                     error-fn nil
@@ -748,6 +762,11 @@ Throws if any result is an exception or the context has been aborted."
                                         :restarting true})
             res-ch (start-fn s)
             stale-timeout 1000]
+
+        (when supervisor
+          ;; this will trigger a close event when all subroutines are stopped
+          (on-abort supervisor
+            (close! ab-ch)))
 
         (go-loop [] 
           (when-not (async/poll! ab-ch)
@@ -769,13 +788,6 @@ Throws if any result is an exception or the context has been aborted."
           (if-not (and (empty? @(:registered s))
                        (empty? @(:pending-exceptions s)))
             (do
-              (when (= (mod i 1000) 0) ;; every 100 seconds
-                #_(log-fn :debug
-                        ["waiting for go-routines to restart: "
-                         #?(:clj (java.util.Date.)
-                            :cljs (js/Date.))
-                         @(:registered s)
-                         @(:pending-exceptions s)]))
               (<! (timeout 100))
               (recur (inc i)))
             (close! close-ch)))
@@ -802,115 +814,7 @@ Throws if any result is an exception or the context has been aborted."
     out-ch))
 
 
-(comment
-  (<?? (go-try (<? (go 42)) (throw (ex-info "foo" {}))))
-
-  (go-try (throw (ex-info "foo" {})))
-
-  (go (let [slow-fn (fn [super]
-                      (go-super
-                       (try
-                         (<? (timeout 5000))
-                         (catch Exception e
-                           (println e))
-                         (finally
-                           (<! (timeout 1000))
-                           (println "Cleaned up slowly.")))))
-            try-fn (fn [] (go-try (throw (ex-info "stale" {}))))
-            database-lookup (fn [key] (go-try (vec (repeat 3 (inc key)))))
-
-            start-fn (fn [super]
-                       (go-super super
-                                 (try-fn) ;; should trigger restart after max 2*stale-timeout
-                                 #_(slow-fn super) ;; concurrent part which needs to free resources
-
-                                 ;; transducer exception handling
-                                 #_(let [ch (chan-super 10 (comp (map (fn [b] (/ 1 b)))
-                                                                 (filter pos?)))]
-                                     (async/onto-chan ch [1 0 3]))
-
-                                 ;; go-for for complex control flow with
-                                 ;; blocking (read) ops (avoiding function
-                                 ;; boundary core.async boilerplate)
-                                 #_(println (<<? (go-for [a [1 2 #_nil -3] ;; comment out nil => BOOOM
-                                                          :let [[b] (<? (database-lookup a))]
-                                                          :when (even? b)
-                                                          c (<? (database-lookup b))]
-                                                         [a b c])))
-                                 (<? (timeout 100))
-                                 #_(throw (ex-info "foo" {}))
-                                 3))]
-        (<? (restarting-supervisor start-fn :retries 3 :stale-timeout 100))))
 
 
-  (go (.info js/console (pr-str (<<? (go-for [a [1 2 -3] ;; comment out nil => BOOOM
-                                              :let [c (<? (go 42))]
-                                              b [3 4]]
-                                             [a b c])))))
-
-  (with-super (map->TrackingSupervisor {:error (chan) :abort (chan)
-                                        :registered (atom {})
-                                        :pending-exceptions (atom {})})
-    (go-super 42 (throw (ex-info "fooz" {}))))
-
-  (go (binding [*super* 49] (.log js/console full.async/*super*)))
-
-  *super*
-
-  (go-super (throw (ex-info "barz" {})))
 
 
-  (go (js/alert (let [start-fn (fn []
-                                 (go-super 42))]
-                  (<! (restarting-supervisor start-fn :retries 3 :stale-timeout 100)))))
-
-
-  (enable-console-print!)
-  ;; works
-  (go (.log js/console (pr-str (let [start-fn (fn []
-                                                (go-super (throw (ex-info "foo" {}))))]
-                                 (<! (restarting-supervisor start-fn :retries 3 :stale-timeout 100))))))
-
-
-  (go (.log js/console (let [slow-fn (fn []
-                                       (go-try
-                                        #_(on-abort
-                                           (.log js/console "Cleaning up."))
-                                        (try
-                                          (<? (timeout 5000))
-                                          (catch js/Error e
-                                            (.log js/console "Aborted by:" (.pr-str e)))
-                                          (finally
-                                            (async/<! (timeout 150))
-                                            (.log js/console "Cleaned up slowly.")))))
-                             try-fn (fn [] (go-try (throw (ex-info "stale" {}))))
-
-                             start-fn (fn []
-                                        (go-try
-                                         (try-fn) ;; should trigger restart after max 2*stale-timeout
-                                         (slow-fn) ;; concurrent part which needs to free resources
-                                         42))]
-                         (<! (restarting-supervisor start-fn :retries 3 :stale-timeout 100))))))
-
-
-(comment
-  ;; jack in figwheel cljs REPL
-  (require 'figwheel-sidecar.repl-api)
-  (figwheel-sidecar.repl-api/cljs-repl)
-
-
-  (go
-    (let [old (+ foo 0)]
-      (set! foo 45)
-      (println old foo)
-      (set! foo old)))
-
-  (defn bar []
-    (go
-      (let [old foo
-            baz 42]
-        (set! foo 46)
-        (println foo old baz)
-        (set! foo old))))
-
-)
