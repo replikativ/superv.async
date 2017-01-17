@@ -8,7 +8,6 @@
                :cljs [cljs.core.async :refer [<! >! alts! chan timeout put! close!
                                               take!]
                       :as async])
-            [clojure.spec :as s]
             #?(:cljs (cljs.core.async.impl.protocols :refer [ReadPort])))
   #?(:cljs (:require-macros [superv.async :refer [wrap-abort! >? <? go-try go-loop-try
                                                   on-abort go-super go-loop-super go-for]]
@@ -654,20 +653,17 @@ Throws if any result is an exception or the context has been aborted."
 
 #?(:clj
    (defmacro go-for
-     "Experimental list comprehension adapted from clojure.core 1.7. Takes a
-  vector of one or more binding-form/collection-expr pairs, each followed by
-  zero or more modifiers, and yields a channel of evaluations of expr. It is
-  eager on all but the outer-most collection. TODO This can cause too many
-  pending puts.
+     "Channel comprehension adapted from clojure.core 1.7. Takes a vector of one
+  or more binding-form/collection-expr pairs, each followed by zero or more
+  modifiers, and yields a channel of evaluations of expr.
 
   Collections are iterated in a nested fashion, rightmost fastest, and
   nested coll-exprs can refer to bindings created in prior
-  binding-forms.  Supported modifiers are: :let [binding-form expr
-  ...],
+  binding-forms. Supported modifiers are: :let [binding-form expr ...],
   :while test, :when test. If a top-level entry is nil, it is skipped
   as it cannot be put on the result channel by core.async semantics.
 
-  (<<? (go-for [x (range 10) :let [y (<? (go-try 4))] :while (< x y)] [x y]))"
+  (<<? S (go-for [x (range 10) :let [y (<? (go-try 4))] :while (< x y)] [x y]))"
      [S seq-exprs body-expr]
      (assert-args
       (vector? seq-exprs) "a vector for its binding"
@@ -700,8 +696,7 @@ Throws if any result is an exception or the context has been aborted."
                                         :else `(let [res# ~body-expr]
                                                  (when res#
                                                    (>? ~S ~res-ch res#))
-                                                 (<? ~S (~giter (rest ~gxs))))
-                                        #_`(cons ~body-expr (<? (~giter (rest ~gxs))))))]
+                                                 (<? ~S (~giter (rest ~gxs))))))]
                          `(fn ~giter [~gxs]
                             (go-loop-try ~S [~gxs ~gxs]
                                          (let [~gxs (seq ~gxs)]
@@ -739,8 +734,11 @@ Throws if any result is an exception or the context has been aborted."
   supervisor waits until all supervised go-routines are finished and
   have freed resources before restarting.
 
-  If exceptions are not taken from go-try channels (by error), they
-  become stale after stale-timeout and trigger a restart. "
+  If exceptions are not taken from go-try channels (by error), they become stale
+  after the stale-timeout and trigger a restart or are propagated to the parent
+  supervisor (if available) and the return value.
+
+  Note: The signature and behaviour of this function might still change."
   [start-fn & {:keys [retries delay error-fn exception stale-timeout log-fn
                       supervisor]
                :or {retries #?(:clj Long/MAX_VALUE :cljs js/Infinity)
@@ -804,6 +802,8 @@ Throws if any result is an exception or the context has been aborted."
                       (not (pos? retries)))
                 (do
                   (log-fn :error {:event :passing-error :error e?})
+                  (when supervisor
+                    (put! (-error supervisor) e?))
                   (put! out-ch e?)
                   (close! out-ch))
                 (do (<! (timeout delay))
