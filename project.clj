@@ -1,4 +1,4 @@
-(defproject io.replikativ/superv.async "0.2.4"
+(defproject io.replikativ/superv.async "0.2.5-SNAPSHOT"
   :description "Supervised channel management for core.async."
 
   :url "https://github.com/replikativ/superv.async"
@@ -11,7 +11,7 @@
 
   :dependencies [[org.clojure/clojure "1.9.0-alpha14" :scope "provided"]
                  [org.clojure/clojurescript "1.9.293" :scope "provided"]
-                 [org.clojure/core.async "0.2.391"]]
+                 [org.clojure/core.async "0.2.395"]]
 
   :plugins [[lein-cljsbuild "1.1.4"]]
 

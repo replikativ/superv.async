@@ -28,8 +28,8 @@
      (if (cljs-env? &env) then else)))
 
 
-;; The protocols and the binding are needed for the channel ops to be transparent for supervision,
-;; most importantly exception tracking
+;; The protocols and the binding are needed for the channel ops to be
+;; transparent for supervision, most importantly exception tracking
 (defprotocol PSupervisor
   (-error [this])
   (-abort [this])
