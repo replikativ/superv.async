@@ -1,4 +1,4 @@
-(defproject io.replikativ/superv.async "0.2.5-SNAPSHOT"
+(defproject io.replikativ/superv.async "0.2.5"
   :description "Supervised channel management for core.async."
 
   :url "https://github.com/replikativ/superv.async"

@@ -334,12 +334,12 @@ Throws if any result is an exception or the context has been aborted."
                 ([v#] (throw (ex-info "Aborted operations" {:type :aborted})))
 
                 (cljs.core.async.macros/go (<<! ~ch))
-                ([v#] (doall (map (fn [e#] (throw-if-exception ~S e#)) v#))))
+                ([v#] (doall (mapv (fn [e#] (throw-if-exception ~S e#)) v#))))
               (alt! (-abort ~S)
                     ([v#] (throw (ex-info "Aborted operations" {:type :aborted})))
 
                     (go (<<! ~ch))
-                    ([v#] (doall (map (fn [e#] (throw-if-exception ~S e#)) v#)))))))
+                    ([v#] (doall (mapv (fn [e#] (throw-if-exception ~S e#)) v#)))))))
 
 ;; TODO lazy-seq vs. full vector in <<! ?
 #?(:clj
