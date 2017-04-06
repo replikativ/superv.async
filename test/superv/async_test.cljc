@@ -74,46 +74,6 @@
       (is (thrown? #?(:clj Exception :cljs js/Error)
                    (<?* S [(go "1") (go (e))]))))))
 
-#_(deftest test-go-retry
-  (test-async
-    (go
-      (is (= (<? (go-retry
-                   {:retries 3}
-                   "foo"))
-             "foo"))
-      (is (thrown? #?(:clj Exception :cljs js/Error)
-                   (<? (go-retry
-                         {:retries 1
-                          :delay 0.1}
-                         ((throw (e)))))))
-      (let [times- (atom 0)
-            error-side-effect (fn [_] (swap! times- inc))]
-        (is (thrown? #?(:clj Exception :cljs js/Error)
-                     (<? (go-retry
-                           {:retries 5
-                            :delay 0.1
-                            :on-error error-side-effect}
-                           (throw (e))))))
-        (is (= 5 @times-)))
-      (let [times- (atom 0)]
-        (is (= (<? (go-retry
-                     {:retries 5
-                      :delay   0.1}
-                     (if (> 3 (swap! times- inc))
-                       (throw (e))
-                       "Bar")))
-               "Bar"))
-        (is (= 3 @times-)))
-      (is (= (let [times- (atom 0)]
-               (<? (go-retry
-                     {:should-retry-fn (fn [res] (= 0 res))
-                      :retries         3
-                      :delay           0.1}
-                     (swap! times- inc)
-                     0))
-               @times-)
-             ; should be 4 (first attempt + 3 retries)
-             4)))))
 
 (deftest test-pmap>>
   (test-async
@@ -205,6 +165,18 @@
                            (timeout 100)
                            :fail)))
            :success))))))
+
+#?(:clj
+   (deftest test-alts?
+     (testing "Test alts? error handling."
+       (test-async
+        (go
+          (let [ch (go 42)
+                [v ch] (alts? S [ch])]
+            (is (= v 42)))
+          (is (thrown? Exception
+                       (let [ch (go (ex-info "foo" {}))
+                             [v ch] (alts? S [ch])]))))))))
 
 ;; thread-try
 #?(:clj

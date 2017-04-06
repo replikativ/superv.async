@@ -297,13 +297,17 @@ deal with abortion."
                 (fn1 ret))
               on-caller?)))
 
-(defn alts?
-"Same as core.async alts! but throws an exception if the channel returns a
-throwable object or the context has been aborted."
-[S ports & opts]
-(wrap-abort! S
-  (let [[val port] (apply alts! ports opts)]
-    [(throw-if-exception S val) port])))
+#?(:clj
+   (defmacro alts?
+     "Same as core.async alts! but throws an exception if the channel returns a
+  throwable object or the context has been aborted. This is a macro and not a
+  function like alts!."
+     [S ports & opts]
+     ;; TODO has no priority in order, can use alternative channel than abort
+     `(if-cljs (let [[val# port#] (cljs.core.async/alts! (concat [(-abort ~S)] ~ports) ~@opts)]
+                 [(throw-if-exception ~S val#) port#])
+               (let [[val# port#] (alts! (concat [(-abort ~S)] ~ports) ~@opts)]
+                 [(throw-if-exception ~S val#) port#]))))
 
 
 #?(:clj
@@ -818,3 +822,36 @@ Throws if any result is an exception or the context has been aborted."
 
 
 
+(defn test-within
+  "Asserts that ch does not close or produce a value within ms. Returns a
+  channel from which the value can be taken."
+  [ms ch]
+  (go-try S
+    (let [t (timeout ms)
+          [v ch] (alts? S [ch t])
+          #_(clojure.core/let
+              [[val__39127__auto__ port__39128__auto__]
+               (clojure.core.async/alts!
+                (clojure.core/concat [(superv.async/-abort S)] [ch t]))]
+            [(superv.async/throw-if-exception S val__39127__auto__) port__39128__auto__])]
+      (when (not= ch t)
+        (prn (str "Test should have finished within " ms "ms.")))
+      v)))
+
+
+(test-within 100 
+             (go-try S 1))
+
+(macroexpand-1 '(go-try S
+                  (let [t (timeout ms)
+                        [v ch] (alts? S [ch t])]
+                    (when (not= ch t)
+                      (prn (str "Test should have finished within " ms "ms.")))
+                    v)))
+
+(macroexpand-1 (macroexpand-1 '(alts? S [ch t]))) 
+
+(comment
+  
+
+  )
