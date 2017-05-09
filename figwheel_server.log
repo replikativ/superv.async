@@ -1,0 +1,50 @@
+[0mCompiling "resources/public/js/client.js" from ["src"]...[0m
+[36m----  Compiler Warning on   src/superv/async.cljc   line:533  column:31  ----[0m
+
+  [1mCan't take value of macro superv.async/alts?[0m
+
+  [36m529[0m  [36m  (let [val (or last-val (<? S ch))[0m
+  [36m530[0m  [36m        timer (async/timeout interval)][0m
+  [36m531[0m  [36m    (if (nil? val)[0m
+  [36m532[0m  [36m      (async/close! out)[0m
+  [33m533[0m  [1m      (let [[new-val ch] (alts? S [ch timer])][0m
+  [0m   [0m  [33m                          ^--- Can't take value of macro superv.async/alts?[0m
+  [36m534[0m  [36m        (condp = ch[0m
+  [36m535[0m  [36m          timer (do (>? S out val) (recur nil))[0m
+  [36m536[0m  [36m          ch (recur new-val))))))[0m
+  [36m537[0m  [36mout))[0m
+
+[36m----  Compiler Warning : Please see src/superv/async.cljc  ----[0m
+[32mSuccessfully compiled "resources/public/js/client.js" in 1.372 seconds.[0m
+notifying browser that file changed:  resources/public/js/out/goog/deps.js
+notifying browser that file changed:  resources/public/js/out/cljs_deps.js
+notifying browser that file changed:  out/superv/async.js
+notifying browser that file changed:  out/figwheel/connect/cljs_repl.js
+[0mCompiling "resources/public/js/client.js" from ["src"]...[0m
+[36m----  Compiler Warning on   src/superv/async.cljc   line:533  column:31  ----[0m
+
+  [1mCan't take value of macro superv.async/alts?[0m
+
+  [36m529[0m  [36m  (let [val (or last-val (<? S ch))[0m
+  [36m530[0m  [36m        timer (async/timeout interval)][0m
+  [36m531[0m  [36m    (if (nil? val)[0m
+  [36m532[0m  [36m      (async/close! out)[0m
+  [33m533[0m  [1m      (let [[new-val ch] (alts? S [ch timer])][0m
+  [0m   [0m  [33m                          ^--- Can't take value of macro superv.async/alts?[0m
+  [36m534[0m  [36m        (condp = ch[0m
+  [36m535[0m  [36m          timer (do (>? S out val) (recur nil))[0m
+  [36m536[0m  [36m          ch (recur new-val))))))[0m
+  [36m537[0m  [36mout))[0m
+
+[36m----  Compiler Warning : Please see src/superv/async.cljc  ----[0m
+[32mSuccessfully compiled "resources/public/js/client.js" in 1.416 seconds.[0m
+notifying browser that file changed:  resources/public/js/out/goog/deps.js
+notifying browser that file changed:  resources/public/js/out/cljs_deps.js
+notifying browser that file changed:  out/superv/async.js
+notifying browser that file changed:  out/figwheel/connect/cljs_repl.js
+[0mCompiling "resources/public/js/client.js" from ["src"]...[0m
+[32mSuccessfully compiled "resources/public/js/client.js" in 1.375 seconds.[0m
+notifying browser that file changed:  resources/public/js/out/goog/deps.js
+notifying browser that file changed:  resources/public/js/out/cljs_deps.js
+notifying browser that file changed:  out/superv/async.js
+notifying browser that file changed:  out/figwheel/connect/cljs_repl.js
