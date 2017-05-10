@@ -10,7 +10,7 @@
                       :as async])
             #?(:cljs (cljs.core.async.impl.protocols :refer [ReadPort])))
   #?(:cljs (:require-macros [superv.async :refer [wrap-abort! >? <? go-try go-loop-try
-                                                  on-abort go-super go-loop-super go-for]]
+                                                  on-abort go-super go-loop-super go-for alts?]]
                             [cljs.core.async.macros :refer [go go-loop alt!]]))
   #?(:clj (:import (clojure.core.async.impl.protocols ReadPort))))
 
@@ -43,7 +43,7 @@
    (defn ^java.util.Date now []
      (java.util.Date.))
    :cljs (defn now []
-           (js/Date.))) 
+           (js/Date.)))
 
 (defrecord TrackingSupervisor [error abort registered pending-exceptions]
   PSupervisor
@@ -770,7 +770,7 @@ Throws if any result is an exception or the context has been aborted."
           (on-abort supervisor
             (close! ab-ch)))
 
-        (go-loop [] 
+        (go-loop []
           (when-not (async/poll! ab-ch)
             (<! (timeout stale-timeout))
             (let [[[e _]] (filter (fn [[k v]]

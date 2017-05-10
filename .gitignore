@@ -11,4 +11,5 @@ pom.xml.asc
 .idea
 local*
 *.iml
+figwheel_server.log
 

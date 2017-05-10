@@ -1,4 +1,4 @@
-(defproject io.replikativ/superv.async "0.2.6"
+(defproject io.replikativ/superv.async "0.2.7"
   :description "Supervised channel management for core.async."
 
   :url "https://github.com/replikativ/superv.async"
@@ -12,6 +12,8 @@
   :dependencies [[org.clojure/clojure "1.9.0-alpha14" :scope "provided"]
                  [org.clojure/clojurescript "1.9.293" :scope "provided"]
                  [org.clojure/core.async "0.3.442"]]
+
+  :target-path "target/%s"
 
   :plugins [[lein-cljsbuild "1.1.4"]]
 
@@ -29,6 +31,9 @@
                                   [org.clojure/clojurescript "1.7.228"]]}
              :1.8 {:dependencies [[org.clojure/clojure "1.8.0"]
                                   [org.clojure/clojurescript "1.8.51"]]}}
+
+  :figwheel
+  {:ring-handler "superv.dev-server/main-handler"}
 
   :cljsbuild
   {:builds [{:id "cljs_repl"
