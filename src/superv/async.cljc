@@ -1,12 +1,12 @@
 (ns superv.async
   #?(:clj (:gen-class :main true))
-  (:require #?(:clj [clojure.core.async :refer [<! <!! >! >!! alt! alt!!
-                                                alts! alts!! go go-loop
+  (:require #?(:clj [clojure.core.async :refer [<! <!! >! >!! alt! alt!! alts!
+                                                alts!! go go-loop promise-chan
                                                 chan thread timeout put! close!
                                                 take!]
                      :as async]
-               :cljs [cljs.core.async :refer [<! >! alts! chan timeout put! close!
-                                              take!]
+               :cljs [cljs.core.async :refer [<! >! alts! chan timeout put!
+                                              close! promise-chan take!]
                       :as async])
             #?(:cljs (cljs.core.async.impl.protocols :refer [ReadPort])))
   #?(:cljs (:require-macros [superv.async :refer [wrap-abort! >? <? go-try go-loop-try
@@ -45,10 +45,14 @@
    :cljs (defn now []
            (js/Date.)))
 
-(defrecord TrackingSupervisor [error abort registered pending-exceptions]
+(defrecord TrackingSupervisor [error aborts registered pending-exceptions]
   PSupervisor
   (-error [this] error)
-  (-abort [this] abort)
+  ;; HACK: avoid too many pending takes on a single abort-ch
+  ;; while this is somewhat hacky, it works without patching core.async
+  ;; and is still bounded. The amount of total ops is also still bounded by a
+  ;; million.
+  (-abort [this] (rand-nth aborts))
   (-register-go [this body]
     (let [id #?(:clj (java.util.UUID/randomUUID) :cljs (random-uuid))]
       (swap! registered assoc id body)
@@ -62,6 +66,8 @@
 
 #?(:cljs (enable-console-print!))
 
+(def ^:const ABORT_CHANS 1000)
+
 (defn simple-supervisor
   "A simple supervisor which deals with errors through callbacks. You need to
   close its abort channel manually if you want the context to stop. It is
@@ -72,7 +78,7 @@
            error-fn (fn [e] (println "Supervisor:" e
                                      #?(:cljs (.-stack e))))}}]
   (let [s (map->TrackingSupervisor {:error (chan)
-                                    :abort (chan)
+                                    :aborts (vec (repeatedly ABORT_CHANS #(promise-chan)))
                                     :registered (atom {})
                                     :pending-exceptions (atom {})})
         err-ch (:error s)]
@@ -756,9 +762,9 @@ Throws if any result is an exception or the context has been aborted."
         out-ch (chan)]
     (go-loop [retries retries]
       (let [err-ch (chan)
-            ab-ch (chan)
+            ab-chs (vec (repeatedly ABORT_CHANS #(promise-chan)))
             close-ch (chan)
-            s (map->TrackingSupervisor {:error err-ch :abort ab-ch
+            s (map->TrackingSupervisor {:error err-ch :aborts ab-chs
                                         :registered (atom {})
                                         :pending-exceptions (atom {})
                                         :restarting true})
@@ -768,10 +774,12 @@ Throws if any result is an exception or the context has been aborted."
         (when supervisor
           ;; this will trigger a close event when all subroutines are stopped
           (on-abort supervisor
-            (close! ab-ch)))
+            (doseq [a ab-chs]
+              (put! a :abort)
+              (close! a))))
 
         (go-loop []
-          (when-not (async/poll! ab-ch)
+          (when-not (some async/poll! ab-chs)
             (<! (timeout stale-timeout))
             (let [[[e _]] (filter (fn [[k v]]
                                     (> (- (.getTime (now)) stale-timeout)
@@ -799,7 +807,9 @@ Throws if any result is an exception or the context has been aborted."
           (if-not (= c close-ch) ;; an error occured
             (do
               (close! err-ch)
-              (close! ab-ch)
+              (doseq [a ab-chs]
+                (put! a :abort)
+                (close! a))
               (<! close-ch) ;; wait until we are finished
               (if (or (not (instance? exception e?))
                       (not (or (not error-fn) (error-fn e?)))
