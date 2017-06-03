@@ -367,3 +367,9 @@
                      (<? super err-ch)))))))
 
 
+
+(deftest reduce<-test
+  (is (= 45 (<?? S (reduce< S (fn [S res s]
+                                (go-try S (+ res s)))
+                            0
+                            (range 10))))))

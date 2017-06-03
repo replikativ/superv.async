@@ -410,6 +410,21 @@ Throws if any result is an exception or the context has been aborted."
      (<?? S (go-try S (<?* S chs)))))
 
 
+(defn reduce<
+  "Reduces over a sequence s with a go function go-f given the initial value
+  init."
+  [S maybe-go-f init s]
+  (go-try S
+      (loop [res init
+             [f & r] s]
+        (if f
+          (let [maybe-ch (maybe-go-f S res f)]
+            (recur (if (chan? maybe-ch)
+                     (<? S maybe-ch)
+                     maybe-ch)
+                   r))
+          res))))
+
 (defn pmap>>
   "Takes objects from in-ch, asynchrously applies function f> (function should
   return a channel), takes the result from the returned channel and if it's
