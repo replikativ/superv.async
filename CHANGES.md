@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.8
+- fix too many pending takes on abort-ch
+- add reduce<
+
 ## 0.2.6
 - fix alts? https://github.com/replikativ/superv.async/issues/2
 - bump core.async
