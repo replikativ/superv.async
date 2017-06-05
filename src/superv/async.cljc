@@ -411,19 +411,19 @@ Throws if any result is an exception or the context has been aborted."
 
 
 (defn reduce<
-  "Reduces over a sequence s with a go function go-f given the initial value
-  init."
+  "Reduces over a sequence s with a go function go-f or a normal function f
+  given the initial value init."
   [S maybe-go-f init s]
   (go-try S
-      (loop [res init
+      (loop [acc init
              [f & r] s]
         (if f
-          (let [maybe-ch (maybe-go-f S res f)]
+          (let [maybe-ch (maybe-go-f S acc f)]
             (recur (if (chan? maybe-ch)
                      (<? S maybe-ch)
                      maybe-ch)
                    r))
-          res))))
+          acc))))
 
 (defn pmap>>
   "Takes objects from in-ch, asynchrously applies function f> (function should
@@ -836,7 +836,8 @@ Throws if any result is an exception or the context has been aborted."
                   (put! out-ch e?)
                   (close! out-ch))
                 (do (<! (timeout delay))
-                    (log-fn :debug {:event :retry :error e? :further-retries retries})
+                    (log-fn :debug {:event :retry :error (:message e?)
+                                    :further-retries retries})
                     (recur (dec retries)))))
             (do (put! out-ch (<! res-ch))
                 (close! out-ch))))))
