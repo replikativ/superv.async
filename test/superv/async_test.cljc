@@ -5,7 +5,7 @@
     #?(:clj [clojure.core.async :refer [<!! <! >! >!! go chan close! alt! timeout] :as async]
        :cljs [cljs.core.async :refer [<! >!] :as async])
     #?(:clj [superv.async :refer :all]
-       :cljs [superv.async :refer-macros [<<! <<? <? <?* go-try go-super go-loop-super]]))
+       :cljs [superv.async :refer-macros [<<! <<? <? <?- <?* go-try go-super go-loop-super]]))
   #?(:cljs (:require-macros [cljs.core.async.macros :refer [go]])))
 
 (defn test-async
@@ -28,14 +28,53 @@
                        (<? S ch))))
              "foo")))))
 
+(deftest test-<?-
+  (test-async
+   (go
+     (is (= (<?- (go
+                    (let [ch (async/chan 1)]
+                      (>! ch "foo")
+                      (async/close! ch)
+                      (<?- ch))))
+            "foo")))))
+
 (deftest test-go-try-<?
   (test-async
    (go
      (is (thrown? #?(:clj Exception :cljs js/Error)
                   (<? S (go-try S
-                          (throw (e)))))))))
+                                (throw (e))))))))
+  (test-async
+   (go
+     (is (let [finally-state (atom nil)
+               exception-state (atom nil)]
+           (<? S (go-try S
+                   #?(:clj (/ 1 0)
+                     :cljs (throw "foo"))
+                   (catch #?(:clj java.lang.ArithmeticException
+                            :cljs js/String) e
+                     (reset! exception-state 42))
+                   (finally (reset! finally-state 42))))
+           (= @exception-state @finally-state 42))))))
 
 
+(deftest test-go-try-<?-
+  (test-async
+   (go
+     (is (thrown? #?(:clj Exception :cljs js/Error)
+                  (<?- (go-try- (throw (e))))))))
+  (test-async
+   (go
+     (is (let [finally-state   (atom nil)
+               exception-state (atom nil)]
+           (<?- (go-try-
+                    #?(:clj (/ 1 0)
+                      :cljs (throw "foo"))
+                  (catch #?(:clj java.lang.ArithmeticException
+                           :cljs js/String) e
+                    (reset! exception-state 42))
+                  (finally (reset! finally-state 42))))
+           (= @exception-state @finally-state 42))))))
 
 (deftest test-<<!
   (test-async
@@ -229,7 +268,19 @@
    (go-super super (/ 1 0)) 
    (test-async
     (go (is (thrown? Exception
-             (<? super err-ch)))))))
+                     (<? super err-ch)))))
+   (test-async
+    (go
+      (is (let [finally-state   (atom nil)
+                exception-state (atom nil)]
+            (<? S (go-super super
+                    #?(:clj (/ 1 0)
+                       :cljs (throw "foo"))
+                    (catch #?(:clj java.lang.ArithmeticException
+                              :cljs js/String) e
+                      (reset! exception-state 42))
+                    (finally (reset! finally-state 42))))
+            (= @exception-state @finally-state 42)))))))
 
 ;; go-loop-super
 (deftest test-go-loop-super

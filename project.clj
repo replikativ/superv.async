@@ -9,31 +9,20 @@
 
   :deploy-repositories [["releases" {:url "https://clojars.org/repo/" :creds :gpg}]]
 
-  :dependencies [[org.clojure/clojure "1.9.0-alpha14" :scope "provided"]
-                 [org.clojure/clojurescript "1.9.293" :scope "provided"]
-                 [org.clojure/core.async "0.3.442"]]
+  :dependencies [[org.clojure/clojure "1.10.1" :scope "provided"]
+                 [org.clojure/clojurescript "1.10.773" :scope "provided"]
+                 [org.clojure/core.async "1.2.603"]]
 
   :target-path "target/%s"
 
-  :plugins [[lein-cljsbuild "1.1.4"]]
+  :plugins [[lein-cljsbuild "1.1.7"]]
 
   :aliases {"all" ["with-profile" "default:+1.7:+1.8"]}
-  :profiles {:dev {:dependencies [[binaryage/devtools "0.8.2"]
-                                  [figwheel-sidecar "0.5.8"]
-                                  [com.cemerick/piggieback "0.2.1"]]
-                   :source-paths ["src" "dev"]
-                   :plugins [[lein-figwheel "0.5.8"]]
-                   :repl-options {; for nREPL dev you really need to limit output
-                                  :init (set! *print-length* 50)
-                                  :nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}}
-
-             :1.7 {:dependencies [[org.clojure/clojure "1.7.0"]
-                                  [org.clojure/clojurescript "1.7.228"]]}
-             :1.8 {:dependencies [[org.clojure/clojure "1.8.0"]
-                                  [org.clojure/clojurescript "1.8.51"]]}}
-
-  :figwheel
-  {:ring-handler "superv.dev-server/main-handler"}
+  :profiles {:dev {:source-paths ["src" "dev"]
+                   :dependencies [[org.clojure/tools.nrepl     "0.2.13"]
+                                  [org.clojure/tools.namespace "0.2.11"]
+                                  [lambdaisland/kaocha         "0.0-389"]
+                                  [lambdaisland/kaocha-cljs    "0.0-21"]]}}
 
   :cljsbuild
   {:builds [{:id "cljs_repl"
