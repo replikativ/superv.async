@@ -12,4 +12,8 @@ pom.xml.asc
 local*
 *.iml
 figwheel_server.log
-
+/.shadow-cljs
+/public
+/resources
+.cpcache
+/.calva
