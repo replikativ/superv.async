@@ -558,7 +558,7 @@ Throws if any result is an exception or the context has been aborted."
    (loop [acc     init
           [f & r] s]
      (if f
-       (let [maybe-ch (maybe-go-f S acc f)]
+       (let [maybe-ch (maybe-go-f acc f)]
          (recur (if (chan? maybe-ch)
                   (<?- maybe-ch)
                   maybe-ch)
