@@ -1,7 +1,6 @@
 /target
 /classes
 /checkouts
-pom.xml
 pom.xml.asc
 *.jar
 *.class
@@ -17,3 +16,5 @@ figwheel_server.log
 /resources
 .cpcache
 /.calva
+out
+node_modules
