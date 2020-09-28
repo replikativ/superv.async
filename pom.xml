@@ -4,8 +4,9 @@
   <packaging>jar</packaging>
   <groupId>io.replikativ</groupId>
   <artifactId>superv.async</artifactId>
-  <version>0.2.10</version>
+  <version>0.2.12-SNAPSHOT</version>
   <name>superv.async</name>
+  <description>Supervised channel management for core.async.</description>
   <dependencies>
     <dependency>
       <groupId>org.clojure</groupId>
