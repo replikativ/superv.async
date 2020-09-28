@@ -1,0 +1,46 @@
+version: 2.1
+
+orbs:
+  tools: replikativ/clj-tools@0
+
+workflows:
+  build-test-and-deploy:
+    jobs:
+      - tools/setup
+      - tools/format:
+          requires:
+            - tools/setup
+      - tools/unittest:
+          requires:
+            - tools/setup
+      - tools/cljstest:
+          requires:
+            - tools/setup
+      - tools/build:
+          jarname: "superv-async"
+          requires:
+            - tools/setup
+      - tools/deploy-snapshot:
+          jarname: "superv-async"
+          context: clojars-deploy
+          filters:
+            branches:
+              only: development
+          requires:
+            - tools/setup
+            - tools/format
+            - tools/unittest
+            - tools/cljstest
+            - tools/build
+      - tools/deploy-release:
+          jarname: "superv-async"
+          context: clojars-deploy
+          filters:
+            branches:
+              only: master
+          requires:
+            - tools/setup
+            - tools/format
+            - tools/unittest
+            - tools/cljstest
+            - tools/build

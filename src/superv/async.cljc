@@ -11,6 +11,8 @@
 
 ;; The protocols and the binding are needed for the channel ops to be
 ;; transparent for supervision, most importantly exception tracking
+
+
 (defprotocol PSupervisor
   (-error [this])
   (-abort [this])
@@ -18,7 +20,6 @@
   (-unregister-go [this id])
   (-track-exception [this e])
   (-free-exception [this e]))
-
 
 #?(:clj
    (defn ^java.util.Date now []
@@ -44,7 +45,6 @@
     (swap! pending-exceptions assoc e (now)))
   (-free-exception [this e]
     (swap! pending-exceptions dissoc e)))
-
 
 (def ^:const NUM_ABORT_CHANS 1000)
 
@@ -79,7 +79,6 @@
            (-free-exception s e))
          (take! (timeout stale-timeout) pending))) nil)
     s))
-
 
 (defn throw-if-exception-
   "Helper method that checks if x is Exception and if yes, wraps it in a new
@@ -129,10 +128,8 @@
                  :cljs cljs.core.async.impl.protocols/ReadPort)
               x))
 
-
 (defn- finally-exp? [exp]
   (not (and (seq? exp) (= (first exp) 'finally))))
-
 
 #?(:clj
    (defmacro go-try-
@@ -166,8 +163,6 @@
      [bindings & body]
      `(go-try- ~S (loop ~bindings ~@body))))
 
-
-
 (defmacro go-try
   "Asynchronously executes the body in a go block. You can provide catch and
   finally clauses to the nested try statement. Returns a channel which will
@@ -198,14 +193,11 @@
                 (-unregister-go ~S id#)
                 ~@finally))))))
 
-
-
 (defmacro go-loop-try
   "Loop binding for go-try."
   {:style/indent 2}
   [S bindings & body]
   `(go-try ~S (loop ~bindings ~@body)))
-
 
 #?(:clj
    (defmacro thread-try
@@ -237,8 +229,6 @@
                   (-unregister-go ~S id#)
                   ~@finally))))))))
 
-
-
 #?(:clj
    (defmacro <?-
      "Same as core.async <! but throws an exception if the channel returns a
@@ -247,7 +237,6 @@
      [ch]
      `(throw-if-exception- (<! ~ch))))
 
-
 #?(:clj
    (defn <??-
      "Same as core.async <!! but throws an exception if the channel returns a
@@ -255,8 +244,6 @@
   go-try-. Use this in code that is non-concurrent and performance sensitive."
      [ch]
      (throw-if-exception- (<!! ch))))
-
-
 
 (defmacro <?
   "Same as core.async <! but throws an exception if the channel returns a
@@ -268,7 +255,6 @@ throwable object or the context has been aborted."
                          (if (= port# abort#)
                            (ex-info "Aborted operations" {:type :aborted})
                            val#))))
-
 
 #?(:clj
    (defn <??
@@ -282,9 +268,6 @@ throwable object or the context has been aborted. "
                              (ex-info "Aborted operations" {:type :aborted})
                              val)))))
 
-
-
-
 #?(:clj
    (defmacro wrap-abort!
      "Internal."
@@ -296,9 +279,6 @@ throwable object or the context has been aborted. "
           (ex-info "Aborted operations" {:type :aborted})
           (do ~@body)))))
 
-
-
-
 #?(:clj
    (defmacro try<?
      [S ch & body]
@@ -308,8 +288,6 @@ throwable object or the context has been aborted. "
    (defmacro try<??
      [S ch & body]
      `(try (<?? ~S ~ch) ~@body)))
-
-
 
 (defn take?
   "Same as core.async/take!, but tracks exceptions in supervisor. TODO
@@ -323,13 +301,11 @@ deal with abortion."
                   (fn1 v))
                 on-caller?)))
 
-
 #?(:clj
    (defmacro >?
      "Same as core.async >! but throws an exception if the context has been aborted."
      [S ch m]
      `(throw-if-exception ~S (wrap-abort! ~S (>! ~ch ~m)))))
-
 
 (defn put?
   "Same as core.async/put!, but tracks exceptions in supervisor. TODO
@@ -358,7 +334,6 @@ deal with abortion."
      ;; TODO has no priority in order, can use alternative channel than abort
      `(let [[val# port#] (alts! (concat [(-abort ~S)] ~ports) ~@opts)]
         [(throw-if-exception ~S val#) port#])))
-
 
 #?(:clj
    (defmacro alt?
@@ -447,7 +422,6 @@ Throws if any result is an exception or the context has been aborted."
      [S chs]
      (<?? S (go-try S (<?* S chs)))))
 
-
 (defn reduce<
   "Reduces over a sequence s with a go function go-f or a normal function f
   given the initial value init."
@@ -510,8 +484,6 @@ Throws if any result is an exception or the context has been aborted."
                  (async/close! out-ch))))
      out-ch)))
 
-
-
 (defn engulf
   "Similiar to dorun. Simply takes messages from channels but does nothing with
   them. Returns channel that will close when all messages have been consumed."
@@ -557,7 +529,6 @@ Throws if any result is an exception or the context has been aborted."
                 (async/close! out))))
     out))
 
-
 (defn partition-all>> [S n in-ch & {:keys [out-ch]}]
   {:pre [(pos? n)]}
   "Batches results from input channel into vectors of n size and supplies
@@ -593,8 +564,6 @@ Throws if any result is an exception or the context has been aborted."
                                 (put? S (-error S) obj)
                                 (inc acc))) 0 ch))
 
-
-
 (defn debounce>>
   "Debounces channel. Forwards first item from input channel to output
   immediately. After that one item every interval ms (if any). If there are more
@@ -611,7 +580,6 @@ Throws if any result is an exception or the context has been aborted."
                          timer (do (>? S out val) (recur nil))
                          ch (recur new-val))))))
     out))
-
 
 #?(:clj
    (defmacro on-abort
@@ -649,7 +617,6 @@ Throws if any result is an exception or the context has been aborted."
              (go-try S (while (<! ch))))
    (async/sub p topic ch close?)))
 
-
 #?(:clj
    (defmacro go-super
      "Asynchronously executes the body in a go block. Returns a channel which
@@ -676,7 +643,6 @@ Throws if any result is an exception or the context has been aborted."
               (finally
                 (-unregister-go ~S id#)
                 ~@finally)))))))
-
 
 #?(:clj
    (defmacro go-loop-super
@@ -707,7 +673,6 @@ Throws if any result is an exception or the context has been aborted."
               (finally
                 (-unregister-go ~S id#))))))))
 
-
 (defn chan-super
   "Creates a supervised channel for transducer xform. Exceptions
   immediatly propagate to the supervisor."
@@ -717,6 +682,8 @@ Throws if any result is an exception or the context has been aborted."
 
 
 ;; taken from clojure/core ~ 1.7
+
+
 #?(:clj
    (defmacro ^{:private true} assert-args
      [& pairs]
@@ -726,7 +693,6 @@ Throws if any result is an exception or the context has been aborted."
           ~(let [more (nnext pairs)]
              (when more
                (list* `assert-args more))))))
-
 
 #?(:clj
    (defmacro go-for
@@ -789,7 +755,6 @@ Throws if any result is an exception or the context has been aborted."
                      (>! ~res-ch e#))
                    (finally (async/close! ~res-ch))))
           ~res-ch))))
-
 
 (defn restarting-supervisor
   "Starts a subsystem with supervised go-routines initialized by start-fn.
@@ -863,7 +828,6 @@ Throws if any result is an exception or the context has been aborted."
               (<! (timeout 100))
               (recur (inc i)))
             (close! close-ch)))
-
 
         (let [[e? c] (alts! [err-ch close-ch] :priority true)]
           (if-not (= c close-ch) ;; an error occured

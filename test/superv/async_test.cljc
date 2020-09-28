@@ -5,7 +5,6 @@
             [superv.async :refer [<? <?- >? S go-try go-try- <<! <<? <?* concat>> partition-all>> count> pmap>> alt? alts? restarting-supervisor go-super go-for map->TrackingSupervisor on-abort put? chan-super go-loop-try go-loop-super
                                   #?@(:clj [<<!! <<?? <?? <!!* <??* thread-try thread-super reduce< <?? chan-super])]]))
 
-
 (defn test-async
   "Asynchronous test awaiting ch to produce a value or close."
   [ch]
@@ -52,7 +51,6 @@
                            (reset! exception-state 42))
                          (finally (reset! finally-state 42))))
            (= @exception-state @finally-state 42))))))
-
 
 (deftest test-go-try-<?-
   (test-async
@@ -107,7 +105,6 @@
      (is (thrown? #?(:clj Exception :cljs js/Error)
                   (<?* S [(go "1") (go (e))]))))))
 
-
 (deftest test-pmap>>
   (test-async
    (go
@@ -118,7 +115,6 @@
                  (<<? S)
                  (set))
             #{2 3})))))
-
 
 (deftest test-concat>>
   (test-async
@@ -148,8 +144,6 @@
    (go
      (is (= (<! (count> S (to-chan! [1 2 3 4]))) 4))
      (is (= (<! (count> S (to-chan! []))) 0)))))
-
-
 
 #?(:clj
    (do
@@ -186,6 +180,8 @@
 
 
 ;; alt?
+
+
 (deftest test-alt?
   (testing "Test alt? error handling."
     (test-async
@@ -197,7 +193,6 @@
                            (timeout 100)
                            :fail)))
            :success))))))
-
 
 (deftest test-alts?
   (testing "Test alts? error handling."
@@ -222,6 +217,8 @@
 
 
 ;; thread-super
+
+
 #?(:clj
    (deftest test-thread-super
      (let [err-ch (chan)
@@ -243,16 +240,18 @@
 
 
 ;; go-loop-try
-   (deftest test-go-loop-try
-     (test-async
-      (go
-        (is
-         (thrown? #?(:clj Exception :cljs js/Error) 
-                  (<? S (go-loop-try S [[f & r] [1 0]]
-                                     #?(:clj (/ 1 f)
+
+
+(deftest test-go-loop-try
+  (test-async
+   (go
+     (is
+      (thrown? #?(:clj Exception :cljs js/Error)
+               (<? S (go-loop-try S [[f & r] [1 0]]
+                                  #?(:clj (/ 1 f)
                                         ;; TODO - Better JS error. In cljs this never terminates without an explicit thrown error
-                                        :cljs (throw (js/Error. "Oops")))
-                                     (recur r))))))))
+                                     :cljs (throw (js/Error. "Oops")))
+                                  (recur r))))))))
 
 ;; go-super
 (deftest test-go-super
@@ -281,52 +280,57 @@
 
 
 ;; go-loop-super
-   (deftest test-go-loop-super
-     (let [err-ch (chan)
-           abort (chan)
-           super (map->TrackingSupervisor {:error err-ch :abort abort
-                                           :registered (atom {})})]
-       (go-loop-super super [[f & r] [1 0]]
-                      #?(:clj (/ 1 f)
+
+
+(deftest test-go-loop-super
+  (let [err-ch (chan)
+        abort (chan)
+        super (map->TrackingSupervisor {:error err-ch :abort abort
+                                        :registered (atom {})})]
+    (go-loop-super super [[f & r] [1 0]]
+                   #?(:clj (/ 1 f)
                                 ;; TODO - Better JS error. In cljs this never terminates without an explicit thrown error
-                         :cljs (throw (js/Error. "Oops")))
-                      (recur r))
-       (test-async
-        (go (is (thrown? #?(:clj Exception :cljs js/Error)
-                         (<? super err-ch)))))))
+                      :cljs (throw (js/Error. "Oops")))
+                   (recur r))
+    (test-async
+     (go (is (thrown? #?(:clj Exception :cljs js/Error)
+                      (<? super err-ch)))))))
 
 
 ;; go-for
+
+
 (deftest test-go-for ;; traditional for comprehension
   (test-async
-   (go 
+   (go
      (is (= (<<? S (go-for S [a (range 5)
                               :let [c 42]
                               b [5 6]
                               :when (even? b)]
                            [a b c]))
             '([0 6 42] [1 6 42] [2 6 42] [3 6 42] [4 6 42])))
-       (is (= (<<? S (go-for S [a [1 2 3]
-                                :let [b (<? S (go (* a 2)))]]
-                             (<? S (go [a b]))))
-              '([1 2] [2 4] [3 6])))
-       (is (= (<<? S (go-for S [a [1 nil 3]]
-                             [a a]))
-              [[1 1] [nil nil] [3 3]]))
-       
-       (is (thrown? #?(:clj Exception :cljs js/Error)
-                    (<<? S (go-for S [a [1 2 3]
-                                      :let [b 0]]
-                                   #?(:clj (/ a b)
-                                      :cljs (get-in a b))))))
-       (is (thrown? #?(:clj Exception :cljs js/Error)
-                    (<<? S (go-for S [a [1 2 3]
-                                      :let [b #?(:clj (/ 1 0) :cljs (throw (js/Error. "Oops")))]]
-                                   42)))))))
+     (is (= (<<? S (go-for S [a [1 2 3]
+                              :let [b (<? S (go (* a 2)))]]
+                           (<? S (go [a b]))))
+            '([1 2] [2 4] [3 6])))
+     (is (= (<<? S (go-for S [a [1 nil 3]]
+                           [a a]))
+            [[1 1] [nil nil] [3 3]]))
+
+     (is (thrown? #?(:clj Exception :cljs js/Error)
+                  (<<? S (go-for S [a [1 2 3]
+                                    :let [b 0]]
+                                 #?(:clj (/ a b)
+                                    :cljs (get-in a b))))))
+     (is (thrown? #?(:clj Exception :cljs js/Error)
+                  (<<? S (go-for S [a [1 2 3]
+                                    :let [b #?(:clj (/ 1 0) :cljs (throw (js/Error. "Oops")))]]
+                                 42)))))))
 
 
 
 ;; supervisor
+
 
 (deftest test-supervisor
   (test-async
@@ -349,8 +353,6 @@
                               42))]
        (go (is (thrown? #?(:clj Exception :cljs js/Error))
                (<? S (restarting-supervisor start-fn :retries 3 :stale-timeout 10))))))))
-
-
 
 #_(deftest test-recover-publication
     (let [recovered-publication? (atom false)]
@@ -405,6 +407,7 @@
 
 ;; transducer embedding
 
+
 (deftest test-transducer-error-handling
   (let [err-ch (chan)
         abort (chan)
@@ -420,8 +423,6 @@
     (test-async
      (go (is (thrown? #?(:clj Exception :cljs js/Error)
                       (<? super err-ch)))))))
-
-
 
 #?(:clj
    (deftest reduce<-test
