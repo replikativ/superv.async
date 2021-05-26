@@ -119,12 +119,20 @@
                     x))
     x))
 
+#?(:clj
+  (defmacro native-image-build? []
+    (try
+      (and (Class/forName "org.graalvm.nativeimage.ImageInfo")
+           #_(eval '(org.graalvm.nativeimage.ImageInfo/inImageBuildtimeCode)))
+      (catch Exception _
+        false))))
+
 ;; a simple global instance, will probably be removed
 (def S
   (try
     ;; We cannot run the simple-supervisor thread in a static context inside
     ;; native image.
-    (if (org.graalvm.nativeimage.ImageInfo/inImageBuildtimeCode)
+    (if (native-image-build?)
       (dummy-supervisor)
       (simple-supervisor))
     (catch Exception _
