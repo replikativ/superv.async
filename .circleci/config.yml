@@ -6,23 +6,27 @@ orbs:
 workflows:
   build-test-and-deploy:
     jobs:
-      - tools/setup
+      - tools/setup:
+          setup_cljs: false
+          context: dockerhub-deploy
       - tools/format:
+          context: dockerhub-deploy
           requires:
             - tools/setup
       - tools/unittest:
-          requires:
-            - tools/setup
-      - tools/cljstest:
+          context: dockerhub-deploy
           requires:
             - tools/setup
       - tools/build:
-          jarname: "superv-async"
+          context: dockerhub-deploy
+          jarname: "superv.async"
           requires:
             - tools/setup
       - tools/deploy-snapshot:
-          jarname: "superv-async"
-          context: clojars-deploy
+          jarname: "superv.async"
+          context:
+            - clojars-deploy
+            - dockerhub-deploy
           filters:
             branches:
               only: development
@@ -30,11 +34,12 @@ workflows:
             - tools/setup
             - tools/format
             - tools/unittest
-            - tools/cljstest
             - tools/build
       - tools/deploy-release:
-          jarname: "superv-async"
-          context: clojars-deploy
+          jarname: "superv.async"
+          context:
+            - clojars-deploy
+            - dockerhub-deploy
           filters:
             branches:
               only: master
@@ -42,5 +47,4 @@ workflows:
             - tools/setup
             - tools/format
             - tools/unittest
-            - tools/cljstest
             - tools/build
