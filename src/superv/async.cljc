@@ -100,6 +100,13 @@
          (take! (timeout stale-timeout) pending))) nil)
     s))
 
+(defn dummy-supervisor []
+  (map->TrackingSupervisor
+   {:error (chan)
+    :aborts (vec (repeatedly NUM_ABORT_CHANS #(promise-chan)))
+    :registered (atom {})
+    :pending-exceptions (atom {})}))
+
 
 (defn throw-if-exception-
   "Helper method that checks if x is Exception and if yes, wraps it in a new
@@ -107,13 +114,29 @@
   to maintain a full stack trace when jumping between multiple contexts."
   [x]
   (if (instance? #?(:clj Exception :cljs js/Error) x)
-    (throw (ex-info (or #?(:clj (.getMessage x)) (str x))
+    (throw (ex-info (or (:clj (.getMessage ^Exception x)) (str x))
                     (or (ex-data x) {})
                     x))
     x))
 
+#?(:clj
+  (defmacro native-image-build? []
+    (try
+      (and (Class/forName "org.graalvm.nativeimage.ImageInfo")
+           #_(eval '(org.graalvm.nativeimage.ImageInfo/inImageBuildtimeCode)))
+      (catch Exception _
+        false))))
+
 ;; a simple global instance, will probably be removed
-(def S (simple-supervisor))
+(def S
+  (try
+    ;; We cannot run the simple-supervisor thread in a static context inside
+    ;; native image.
+    (if (native-image-build?)
+      (dummy-supervisor)
+      (simple-supervisor))
+    (catch Exception _
+      (simple-supervisor))))
 
 (defn throw-if-exception
   "Helper method that checks if x is Exception and if yes, wraps it in a new
@@ -122,7 +145,7 @@
   [S x]
   (if (instance? #?(:clj Exception :cljs js/Error) x)
     (do (-free-exception S x)
-        (throw (ex-info (or #?(:clj (.getMessage x)) (str x))
+        (throw (ex-info (or (:clj (.getMessage ^Exception x)) (str x))
                         (or (ex-data x) {})
                         x)))
     x))
