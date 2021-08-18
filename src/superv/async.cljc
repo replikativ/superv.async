@@ -1,35 +1,18 @@
 (ns superv.async
   #?(:clj (:gen-class :main true))
-  (:require #?(:clj [clojure.core.async :refer [<! <!! >! >!! alt! alt!! alts!
-                                                alts!! go go-loop promise-chan
-                                                chan thread timeout put! close!
-                                                take!]
-                     :as async]
-               :cljs [cljs.core.async :refer [<! >! alts! chan timeout put!
-                                              close! promise-chan take!]
-                      :as async])
+  (:require [clojure.core.async :as async :refer [<! >! alt! alts! go go-loop promise-chan chan timeout put! close! take!
+                                                  #?@(:clj [<!! >!! alt!! alts!! thread])]]
             #?(:cljs (cljs.core.async.impl.protocols :refer [ReadPort])))
   #?(:cljs (:require-macros [superv.async :refer [wrap-abort! >? <? <?- go-try go-loop-try go-try- go-loop-try-
-                                                  on-abort go-super go-loop-super go-for alts?]]
-                            [cljs.core.async.macros :refer [go go-loop alt!]]))
+                                                  on-abort go-super go-loop-super go-for alts?]]))
   #?(:clj (:import (clojure.core.async.impl.protocols ReadPort))))
 
-
-(defn- cljs-env?
-  "Take the &env from a macro, and tell whether we are expanding into cljs."
-  [env]
-  (boolean (:ns env)))
-
-#?(:clj
-   (defmacro if-cljs
-     "Return then if we are generating cljs code and else for Clojure code.
-     https://groups.google.com/d/msg/clojurescript/iBY5HaQda4A/w1lAQi9_AwsJ"
-     [then else]
-     (if (cljs-env? &env) then else)))
 
 
 ;; The protocols and the binding are needed for the channel ops to be
 ;; transparent for supervision, most importantly exception tracking
+
+
 (defprotocol PSupervisor
   (-error [this])
   (-abort [this])
@@ -37,7 +20,6 @@
   (-unregister-go [this id])
   (-track-exception [this e])
   (-free-exception [this e]))
-
 
 #?(:clj
    (defn ^java.util.Date now []
@@ -63,8 +45,6 @@
     (swap! pending-exceptions assoc e (now)))
   (-free-exception [this e]
     (swap! pending-exceptions dissoc e)))
-
-#?(:cljs (enable-console-print!))
 
 (def ^:const NUM_ABORT_CHANS 1000)
 
@@ -106,7 +86,6 @@
     :aborts (vec (repeatedly NUM_ABORT_CHANS #(promise-chan)))
     :registered (atom {})
     :pending-exceptions (atom {})}))
-
 
 (defn throw-if-exception-
   "Helper method that checks if x is Exception and if yes, wraps it in a new
@@ -172,10 +151,8 @@
                  :cljs cljs.core.async.impl.protocols/ReadPort)
               x))
 
-
 (defn- finally-exp? [exp]
   (not (and (seq? exp) (= (first exp) 'finally))))
-
 
 #?(:clj
    (defmacro go-try-
@@ -193,19 +170,14 @@
                (throw (ex-info "More than one finally clause provided."
                                {:body exps
                                 :finally-clauses finally})))
-           finally (rest (first finally)) ]
-       `(if-cljs (cljs.core.async.macros/go
-                   (try ~@body
-                        (catch js/Error e#
-                          e#)
-                        (finally
-                          ~@finally)))
-          (go
-            (try
-              ~@body
-              (catch Exception e#
-                e#)
-              (finally ~@finally)))))))
+           finally (rest (first finally))
+           e (if (:ns &env) `js/Error Exception)]
+       `(go
+          (try
+            ~@body
+            (catch ~e e#
+              e#)
+            (finally ~@finally))))))
 
 #?(:clj
    (defmacro go-loop-try-
@@ -214,59 +186,41 @@
      [bindings & body]
      `(go-try- ~S (loop ~bindings ~@body))))
 
-
-#?(:clj
-   (defmacro go-try
-     "Asynchronously executes the body in a go block. You can provide catch and
+(defmacro go-try
+  "Asynchronously executes the body in a go block. You can provide catch and
   finally clauses to the nested try statement. Returns a channel which will
   receive the result of the body when completed or the exception if an exception
   is thrown. You are responsible to take this exception and deal with it! This
   means you need to take the result from the channel at some point or the
   supervisor will take care of the error."
-     {:style/indent 1}
-     [S & exps]
-     (let [body    (take-while finally-exp? exps)
-           finally (drop-while finally-exp? exps)
-           _ (when (> (count finally) 1)
-               (throw (ex-info "More than one finally clause provided."
-                               {:body exps
-                                :finally-clauses finally})))
-           finally (rest (first finally)) ]
-       `(let [c#       (check-supervisor S)
-              id#      (-register-go ~S (quote ~exps))]
-          ;; if-cljs is sensible to symbol pass-through it is not yet
-          ;; clear to me why (if-cljs `cljs.core.async/go `async/go)
-          ;; does not work
-          (if-cljs (cljs.core.async.macros/go
-                     (try ~@body
-                          (catch js/Error e#
-                            (when-not (= (:type (ex-data e#))
-                                         :aborted)
-                              (-track-exception ~S e#))
-                            e#)
-                          (finally
-                            (-unregister-go ~S id#)
-                            ~@finally)))
-            (go
-              (try
-                ~@body
-                (catch Exception e#
-                  (when-not (= (:type (ex-data e#))
-                               :aborted)
-                    (-track-exception ~S e#))
-                  e#)
-                (finally
-                  (-unregister-go ~S id#)
-                  ~@finally))))))))
+  {:style/indent 1}
+  [S & exps]
+  (let [body    (take-while finally-exp? exps)
+        finally (drop-while finally-exp? exps)
+        _ (when (> (count finally) 1)
+            (throw (ex-info "More than one finally clause provided."
+                            {:body exps
+                             :finally-clauses finally})))
+        finally (rest (first finally))
+        e (if (:ns &env) `js/Error Exception)]
+    `(let [c#       (check-supervisor S)
+           id#      (-register-go ~S (quote ~exps))]
+       (go
+         (try ~@body
+              (catch ~e e#
+                (when-not (= (:type (ex-data e#))
+                             :aborted)
+                  (-track-exception ~S e#))
+                e#)
+              (finally
+                (-unregister-go ~S id#)
+                ~@finally))))))
 
-
-#?(:clj
-   (defmacro go-loop-try
-     "Loop binding for go-try."
-     {:style/indent 2}
-     [S bindings & body]
-     `(go-try ~S (loop ~bindings ~@body))))
-
+(defmacro go-loop-try
+  "Loop binding for go-try."
+  {:style/indent 2}
+  [S bindings & body]
+  `(go-try ~S (loop ~bindings ~@body)))
 
 #?(:clj
    (defmacro thread-try
@@ -281,9 +235,10 @@
                      (throw (ex-info "More than one finally clause provided."
                                      {:body            exps
                                       :finally-clauses finally})))
-           finally (rest (first finally)) ]
-       `(if-cljs (throw (ex-info "thread-try is not supported in cljs." {:code body}))
-          (let [c#  (check-supervisor S)
+           finally (rest (first finally))]
+       (if (:ns &env)
+         (throw (ex-info "thread-try is not supported in cljs." {:code body}))
+         `(let [c#  (check-supervisor S)
                 id# (-register-go ~S (quote ~body))]
             (thread
               (try
@@ -297,159 +252,101 @@
                   (-unregister-go ~S id#)
                   ~@finally))))))))
 
-
-
 #?(:clj
-  (defmacro <?-
-    "Same as core.async <! but throws an exception if the channel returns a
+   (defmacro <?-
+     "Same as core.async <! but throws an exception if the channel returns a
   throwable object. This is operation is unsupervised and the complement to
   go-try-. Use this in code that is non-concurrent and performance sensitive."
-    [ch]
-    `(throw-if-exception- (<! ~ch))))
-
+     [ch]
+     `(throw-if-exception- (<! ~ch))))
 
 #?(:clj
-  (defn <??-
-    "Same as core.async <!! but throws an exception if the channel returns a
+   (defn <??-
+     "Same as core.async <!! but throws an exception if the channel returns a
   throwable object. This is operation is unsupervised and the complement to
   go-try-. Use this in code that is non-concurrent and performance sensitive."
-    [ch]
-    (throw-if-exception- (<!! ch))))
+     [ch]
+     (throw-if-exception- (<!! ch))))
 
-
-#?(:clj
-  (defmacro <?
-    "Same as core.async <! but throws an exception if the channel returns a
+(defmacro <?
+  "Same as core.async <! but throws an exception if the channel returns a
 throwable object or the context has been aborted."
-    [S ch]
-    `(if-cljs (throw-if-exception ~S
-              (let [abort# (-abort ~S)
-                    [val# port#] (cljs.core.async/alts! [abort# ~ch] :priority :true)]
-                (if (= port# abort#)
-                  (ex-info "Aborted operations" {:type :aborted})
-                  val#)))
-              (throw-if-exception ~S
-              (let [abort# (-abort ~S)
-                    [val# port#] (alts! [abort# ~ch] :priority :true)]
-                (if (= port# abort#)
-                  (ex-info "Aborted operations" {:type :aborted})
-                  val#))))))
-
+  [S ch]
+  `(throw-if-exception ~S
+                       (let [abort# (-abort ~S)
+                             [val# port#] (alts! [abort# ~ch] :priority :true)]
+                         (if (= port# abort#)
+                           (ex-info "Aborted operations" {:type :aborted})
+                           val#))))
 
 #?(:clj
-  (defn <??
-    "Same as core.async <!! but throws an exception if the channel returns a
+   (defn <??
+     "Same as core.async <!! but throws an exception if the channel returns a
 throwable object or the context has been aborted. "
-    [S ch]
-    (throw-if-exception S
-    (let [abort (-abort S)
-          [val port] (alts!! [abort ch] :priority :true)]
-      (if (= port abort)
-        (ex-info "Aborted operations" {:type :aborted})
-        val)))))
-
-
-
+     [S ch]
+     (throw-if-exception S
+                         (let [abort (-abort S)
+                               [val port] (alts!! [abort ch] :priority :true)]
+                           (if (= port abort)
+                             (ex-info "Aborted operations" {:type :aborted})
+                             val)))))
 
 #?(:clj
    (defmacro wrap-abort!
      "Internal."
      [S & body]
-     `(if-cljs (let [abort# (-abort ~S)
-                     to# (cljs.core.async/timeout 0)
-                     [val# port#] (cljs.core.async/alts! [abort# to#] :priority true)]
-                 (if (= port# abort#)
-                   (ex-info "Aborted operations" {:type :aborted})
-                   (do ~@body)))
-               (let [abort# (-abort ~S)
-                     to# (timeout 0)
-                     [val# port#] (alts! [abort# to#] :priority true)]
-                 (if (= port# abort#)
-                   (ex-info "Aborted operations" {:type :aborted})
-                   (do ~@body))))))
+     `(let [abort# (-abort ~S)
+            to# (timeout 0)
+            [val# port#] (alts! [abort# to#] :priority true)]
+        (if (= port# abort#)
+          (ex-info "Aborted operations" {:type :aborted})
+          (do ~@body)))))
 
 #?(:clj
-  (defmacro <?
-    "Same as core.async <! but throws an exception if the channel returns a
-throwable object or the context has been aborted."
-    [S ch]
-    `(if-cljs (throw-if-exception ~S
-              (let [abort# (-abort ~S)
-                    [val# port#] (cljs.core.async/alts! [abort# ~ch] :priority :true)]
-                (if (= port# abort#)
-                  (ex-info "Aborted operations" {:type :aborted})
-                  val#)))
-              (throw-if-exception ~S
-              (let [abort# (-abort ~S)
-                    [val# port#] (alts! [abort# ~ch] :priority :true)]
-                (if (= port# abort#)
-                  (ex-info "Aborted operations" {:type :aborted})
-                  val#))))))
-
+   (defmacro try<?
+     [S ch & body]
+     `(try (<? ~S ~ch) ~@body)))
 
 #?(:clj
-  (defn <??
-    "Same as core.async <!! but throws an exception if the channel returns a
-throwable object or the context has been aborted. "
-    [S ch]
-    (throw-if-exception S
-    (let [abort (-abort S)
-          [val port] (alts!! [abort ch] :priority :true)]
-      (if (= port abort)
-        (ex-info "Aborted operations" {:type :aborted})
-        val)))))
-
-
-#?(:clj
-  (defmacro try<?
-    [S ch & body]
-    `(try (<? ~S ~ch) ~@body)))
-
-#?(:clj
-  (defmacro try<??
-    [S ch & body]
-    `(try (<?? ~S ~ch) ~@body)))
-
-
+   (defmacro try<??
+     [S ch & body]
+     `(try (<?? ~S ~ch) ~@body)))
 
 (defn take?
-"Same as core.async/take!, but tracks exceptions in supervisor. TODO
+  "Same as core.async/take!, but tracks exceptions in supervisor. TODO
 deal with abortion."
-([S port fn1] (take? S port fn1 true))
-([S port fn1 on-caller?]
-  (async/take! port
-              (fn [v]
-                (when (instance? #?(:clj Exception :cljs js/Error) v)
-                  (-free-exception S v))
-                (fn1 v))
-              on-caller?)))
-
+  ([S port fn1] (take? S port fn1 true))
+  ([S port fn1 on-caller?]
+   (async/take! port
+                (fn [v]
+                  (when (instance? #?(:clj Exception :cljs js/Error) v)
+                    (-free-exception S v))
+                  (fn1 v))
+                on-caller?)))
 
 #?(:clj
-  (defmacro >?
-    "Same as core.async >! but throws an exception if the context has been aborted."
-    [S ch m]
-    `(if-cljs (throw-if-exception ~S (wrap-abort! ~S (cljs.core.async/>! ~ch ~m)))
-              (throw-if-exception ~S (wrap-abort! ~S (>! ~ch ~m))))))
-
+   (defmacro >?
+     "Same as core.async >! but throws an exception if the context has been aborted."
+     [S ch m]
+     `(throw-if-exception ~S (wrap-abort! ~S (>! ~ch ~m)))))
 
 (defn put?
-"Same as core.async/put!, but tracks exceptions in supervisor. TODO
+  "Same as core.async/put!, but tracks exceptions in supervisor. TODO
 deal with abortion."
-([S port val]
-  (put? S port val (fn noop [_])))
-([S port val fn1]
-  (put? S port val fn1 true))
-([S port val fn1 on-caller?]
-  (async/put! port
-              val
-              (fn [ret]
-                (when (and (instance? #?(:clj Exception :cljs js/Error) val)
-                          (not (= (:type (ex-data val))
-                                  :aborted)))
-                  (-track-exception S val))
-                (fn1 ret))
-              on-caller?)))
+  ([S port val]
+   (put? S port val (fn noop [_])))
+  ([S port val fn1]
+   (put? S port val fn1 true))
+  ([S port val fn1 on-caller?]
+   (async/put! port
+               val
+               (fn [ret]
+                 (when (and (instance? #?(:clj Exception :cljs js/Error) val)
+                            (not (= (:type (ex-data val))
+                                    :aborted)))
+                   (-track-exception S val))
+                 (fn1 ret))
+               on-caller?)))
 
 #?(:clj
    (defmacro alts?
@@ -458,94 +355,85 @@ deal with abortion."
   function like alts!."
      [S ports & opts]
      ;; TODO has no priority in order, can use alternative channel than abort
-     `(if-cljs (let [[val# port#] (cljs.core.async/alts! (concat [(-abort ~S)] ~ports) ~@opts)]
-                 [(throw-if-exception ~S val#) port#])
-               (let [[val# port#] (alts! (concat [(-abort ~S)] ~ports) ~@opts)]
-                 [(throw-if-exception ~S val#) port#]))))
-
+     `(let [[val# port#] (alts! (concat [(-abort ~S)] ~ports) ~@opts)]
+        [(throw-if-exception ~S val#) port#])))
 
 #?(:clj
-  (defmacro alt?
-    "Same as core.async alt! but throws an exception if the channel returns a
+   (defmacro alt?
+     "Same as core.async alt! but throws an exception if the channel returns a
 throwable object or the context has been aborted."
-    [S & clauses]
-    `(if-cljs (throw-if-exception ~S (wrap-abort! ~S (cljs.core.async.macros/alt! ~@clauses)))
-              (throw-if-exception ~S (wrap-abort! ~S (alt! ~@clauses))))))
+     [S & clauses]
+     `(throw-if-exception ~S (wrap-abort! ~S (alt! ~@clauses)))))
 
 #?(:clj
-  (defmacro <<!
-    "Takes multiple results from a channel and returns them as a vector.
+   (defmacro <<!
+     "Takes multiple results from a channel and returns them as a vector.
 The input channel must be closed."
-    [ch]
-    `(if-cljs (let [ch# ~ch]
-                (cljs.core.async/<! (cljs.core.async/into [] ch#)))
-              (let [ch# ~ch]
-                (<! (async/into [] ch#))))))
+     [ch]
+     `(let [ch# ~ch]
+        (<! (async/into [] ch#)))))
 
 #?(:clj
-  (defmacro <<?
-    "Takes multiple results from a channel and returns them as a vector.
+   (defmacro <<?
+     "Takes multiple results from a channel and returns them as a vector.
 Throws if any result is an exception or the context has been aborted."
-    [S ch]
-    `(if-cljs (cljs.core.async.macros/alt!
-                (-abort ~S)
-                ([v#] (throw (ex-info "Aborted operations" {:type :aborted})))
-
-                (cljs.core.async.macros/go (<<! ~ch))
-                ([v#] (doall (mapv (fn [e#] (throw-if-exception ~S e#)) v#))))
-              (alt! (-abort ~S)
-                    ([v#] (throw (ex-info "Aborted operations" {:type :aborted})))
-
-                    (go (<<! ~ch))
-                    ([v#] (doall (mapv (fn [e#] (throw-if-exception ~S e#)) v#)))))))
+     [S ch]
+     `(alt! (-abort ~S)
+            ([v#] (throw (ex-info "Aborted operations" {:type :aborted})))
+            (go (<<! ~ch))
+            ([v#] (doall (mapv (fn [e#] (throw-if-exception ~S e#)) v#))))))
 
 ;; TODO lazy-seq vs. full vector in <<! ?
 #?(:clj
-  (defn <<!!
-    [ch]
-    (lazy-seq
-    (let [next (<!! ch)]
-      (when next
-        (cons next (<<!! ch)))))))
+   (defn <<!!
+     [ch]
+     (lazy-seq
+      (let [next (<!! ch)]
+        (when next
+          (cons next (<<!! ch)))))))
 
 #?(:clj
-  (defn <<??
-    [S ch]
-    (lazy-seq
-    (let [next (<?? S ch)]
-      (when next
-        (cons next (<<?? S ch)))))))
+   (defn <<??
+     [S ch]
+     (lazy-seq
+      (let [next (<?? S ch)]
+        (when next
+          (cons next (<<?? S ch)))))))
 
 #?(:clj
-  (defmacro <!*
-    "Takes one result from each channel and returns them as a collection.
+   (defmacro <!*
+     "Takes one result from each channel and returns them as a collection.
     The results maintain the order of channels."
-    [chs]
-    `(let [chs# ~chs]
-      (loop [chs# chs#
-             results# (if-cljs cljs.core.PersistentQueue.EMPTY
-                                (clojure.lang.PersistentQueue/EMPTY))]
-        (if-let [head# (first chs#)]
-          (->> (if-cljs (cljs.core.async/<! head#) (<! head#))
-                (conj results#)
-                (recur (rest chs#)))
-          (vec results#))))))
+     [chs]
+     (let [PersistentQueue (if (:ns &env)
+                             `cljs.core.PersistentQueue.EMPTY
+                             `(clojure.lang.PersistentQueue/EMPTY))]
+       `(let [chs# ~chs]
+          (loop [chs# chs#
+                 results# ~PersistentQueue]
+            (if-let [head# (first chs#)]
+              (->> (<! head#)
+                   (conj results#)
+                   (recur (rest chs#)))
+              (vec results#)))))))
 
 #?(:clj
-  (defmacro <?*
+   (defmacro <?*
      "Takes one result from each channel and returns them as a collection.
       The results maintain the order of channels. Throws if any of the
       channels returns an exception."
      [S chs]
-     `(let [chs# ~chs]
-        (loop [chs# chs#
-               results# (if-cljs cljs.core.PersistentQueue.EMPTY
-                                 (clojure.lang.PersistentQueue/EMPTY))]
-          (if-let [head# (first chs#)]
-            (->> (<? ~S head#)
-                 (conj results#)
-                 (recur (rest chs#)))
-            (vec results#))))))
+     (let [PersistentQueue (if (:ns &env)
+                             `cljs.core.PersistentQueue.EMPTY
+                             `(clojure.lang.PersistentQueue/EMPTY))]
+       `(let [chs# ~chs]
+          (loop [chs# chs#
+                 results# ~PersistentQueue]
+            (if-let [head# (first chs#)]
+              (->> (<? ~S head#)
+                   (conj results#)
+                   (recur (rest chs#)))
+              (vec results#)))))))
 
 #?(:clj
    (defn <!!*
@@ -557,21 +445,20 @@ Throws if any result is an exception or the context has been aborted."
      [S chs]
      (<?? S (go-try S (<?* S chs)))))
 
-
 (defn reduce<
   "Reduces over a sequence s with a go function go-f or a normal function f
   given the initial value init."
   [S maybe-go-f init s]
   (go-try S
-      (loop [acc init
-             [f & r] s]
-        (if f
-          (let [maybe-ch (maybe-go-f S acc f)]
-            (recur (if (chan? maybe-ch)
-                     (<? S maybe-ch)
-                     maybe-ch)
-                   r))
-          acc))))
+          (loop [acc init
+                 [f & r] s]
+            (if f
+              (let [maybe-ch (maybe-go-f S acc f)]
+                (recur (if (chan? maybe-ch)
+                         (<? S maybe-ch)
+                         maybe-ch)
+                       r))
+              acc))))
 
 (defn reduce<?-
   "Reduces over a sequence s with a go function go-f or a normal function f
@@ -600,25 +487,25 @@ Throws if any result is an exception or the context has been aborted."
   ([S f> parallelism out-ch in-ch]
    {:pre [(fn? f>)
           (and (integer? parallelism) (pos? parallelism))
-          (instance? ReadPort in-ch)]}
+          ;; TODO: find out why this only works in clj
+          #?(:clj (instance? ReadPort in-ch))]}
+
    (let [threads (atom parallelism)]
      (dotimes [_ parallelism]
        (go-try S
-         (loop []
-           (when-let [obj (<? S in-ch)]
-             (if (instance? #?(:clj Exception :cljs js/Error) obj)
-               (do
-                 (>? S out-ch obj)
-                 (async/close! out-ch))
-               (do
-                 (when-let [result (<? S (f> obj))]
-                   (>? S out-ch result))
-                 (recur)))))
-         (when (zero? (swap! threads dec))
-           (async/close! out-ch))))
+               (loop []
+                 (when-let [obj (<? S in-ch)]
+                   (if (instance? #?(:clj Exception :cljs js/Error) obj)
+                     (do
+                       (>? S out-ch obj)
+                       (async/close! out-ch))
+                     (do
+                       (when-let [result (<? S (f> obj))]
+                         (>? S out-ch result))
+                       (recur)))))
+               (when (zero? (swap! threads dec))
+                 (async/close! out-ch))))
      out-ch)))
-
-
 
 (defn engulf
   "Similiar to dorun. Simply takes messages from channels but does nothing with
@@ -626,7 +513,7 @@ Throws if any result is an exception or the context has been aborted."
   [S & cs]
   (let [ch (async/merge cs)]
     (go-loop-try S []
-      (when (<? S ch) (recur)))))
+                 (when (<? S ch) (recur)))))
 
 (defn reduce>
   "Performs a reduce on objects from ch with the function f> (which
@@ -635,15 +522,15 @@ Throws if any result is an exception or the context has been aborted."
   [S f> acc ch]
   (let [result (chan)]
     (go-loop-try S [acc acc]
-      (if-let [x (<? S ch)]
-        (if (instance? #?(:clj Exception :cljs js/Error) x)
-          (do
-            (>? S result x)
-            (async/close! result))
-          (->> (f> acc x) (<? S) recur))
-        (do
-          (>? S result acc)
-          (async/close! result))))
+                 (if-let [x (<? S ch)]
+                   (if (instance? #?(:clj Exception :cljs js/Error) x)
+                     (do
+                       (>? S result x)
+                       (async/close! result))
+                     (->> (f> acc x) (<? S) recur))
+                   (do
+                     (>? S result acc)
+                     (async/close! result))))
     result))
 
 (defn concat>>
@@ -653,45 +540,44 @@ Throws if any result is an exception or the context has been aborted."
   [S & cs]
   (let [out (chan)]
     (go-try S
-      (loop [cs cs]
-        (if-let [c (first cs)]
-          (if-let [v (<? S c)]
-            (do
-              (>? S out v)
-              (recur cs))
+            (loop [cs cs]
+              (if-let [c (first cs)]
+                (if-let [v (<? S c)]
+                  (do
+                    (>? S out v)
+                    (recur cs))
             ; channel empty - move to next channel
-            (recur (rest cs)))
+                  (recur (rest cs)))
           ; no more channels remaining - close output channel
-          (async/close! out))))
+                (async/close! out))))
     out))
 
-
 (defn partition-all>> [S n in-ch & {:keys [out-ch]}]
+  {:pre [(pos? n)]}
   "Batches results from input channel into vectors of n size and supplies
   them to ouput channel. If any input result is an exception, it is put onto
   output channel directly and ouput channel is closed."
-  {:pre [(pos? n)]}
   (let [out-ch (or out-ch (chan))]
     (go-loop-try S [batch []]
-      (if-let [obj (<? S in-ch)]
-        (if (instance? #?(:clj Exception :cljs js/Error) obj)
+                 (if-let [obj (<? S in-ch)]
+                   (if (instance? #?(:clj Exception :cljs js/Error) obj)
           ; exception - put on output and close
-          (do (>? S out-ch obj)
-              (async/close! out-ch))
+                     (do (>? S out-ch obj)
+                         (async/close! out-ch))
           ; add object to current batch
-          (let [new-batch (conj batch obj)]
-            (if (= n (count new-batch))
+                     (let [new-batch (conj batch obj)]
+                       (if (= n (count new-batch))
               ; batch size reached - put batch on output and start a new one
-              (do
-                (>? S out-ch new-batch)
-                (recur []))
+                         (do
+                           (>? S out-ch new-batch)
+                           (recur []))
               ; process next object
-              (recur new-batch))))
+                         (recur new-batch))))
         ; no more results - put outstanding batch onto output and close
-        (do
-          (when (not-empty batch)
-            (>? S out-ch batch))
-          (async/close! out-ch))))
+                   (do
+                     (when (not-empty batch)
+                       (>? S out-ch batch))
+                     (async/close! out-ch))))
     out-ch))
 
 (defn count>
@@ -701,8 +587,6 @@ Throws if any result is an exception or the context has been aborted."
                                 (put? S (-error S) obj)
                                 (inc acc))) 0 ch))
 
-
-
 (defn debounce>>
   "Debounces channel. Forwards first item from input channel to output
   immediately. After that one item every interval ms (if any). If there are more
@@ -710,16 +594,15 @@ Throws if any result is an exception or the context has been aborted."
   [S ch interval]
   (let [out (chan)]
     (go-loop-try S [last-val nil]
-      (let [val (or last-val (<? S ch))
-            timer (async/timeout interval)]
-        (if (nil? val)
-          (async/close! out)
-          (let [[new-val ch] (alts? S [ch timer])]
-            (condp = ch
-              timer (do (>? S out val) (recur nil))
-              ch (recur new-val))))))
+                 (let [val (or last-val (<? S ch))
+                       timer (async/timeout interval)]
+                   (if (nil? val)
+                     (async/close! out)
+                     (let [[new-val ch] (alts? S [ch timer])]
+                       (condp = ch
+                         timer (do (>? S out val) (recur nil))
+                         ch (recur new-val))))))
     out))
-
 
 #?(:clj
    (defmacro on-abort
@@ -729,13 +612,9 @@ Throws if any result is an exception or the context has been aborted."
   free the resources for us as is the case with the Erlang VM."
      {:style/indent 1}
      [S & body]
-     `(if-cljs
-       (go-try ~S
-        (cljs.core.async/<! (-abort ~S))
-        ~@body)
-       (go-try ~S
-        (<! (-abort ~S))
-        ~@body))))
+     `(go-try ~S
+              (<! (-abort ~S))
+              ~@body)))
 
 (defn tap
   "Safely managed tap. The channel is closed on abortion and all
@@ -744,9 +623,9 @@ Throws if any result is an exception or the context has been aborted."
    (tap S mult ch false))
   ([S mult ch close?]
    (on-abort S
-     (close! ch)
-     ;; flush
-     (go-try (while (<! ch))))
+             (close! ch)
+             ;; flush
+             (go-try (while (<! ch))))
    (async/tap mult ch close?)))
 
 (defn sub
@@ -756,11 +635,10 @@ Throws if any result is an exception or the context has been aborted."
    (sub S p topic ch false))
   ([S p topic ch close?]
    (on-abort S
-     (close! ch)
-     ;; flush
-     (go-try S (while (<! ch))))
+             (close! ch)
+             ;; flush
+             (go-try S (while (<! ch))))
    (async/sub p topic ch close?)))
-
 
 #?(:clj
    (defmacro go-super
@@ -772,32 +650,22 @@ Throws if any result is an exception or the context has been aborted."
      (let [body    (take-while finally-exp? exps)
            finally (drop-while finally-exp? exps)
            _       (when (> (count finally) 1)
-               (throw (ex-info "More than one finally clause provided."
-                               {:body            exps
-                                :finally-clauses finally})))
-           finally (rest (first finally))]
+                     (throw (ex-info "More than one finally clause provided."
+                                     {:body            exps
+                                      :finally-clauses finally})))
+           finally (rest (first finally))
+           e (if (:ns &env) `js/Error Exception)]
        `(let [c#  (check-supervisor S)
               id# (-register-go ~S (quote ~body))]
-          (if-cljs
-              (cljs.core.async.macros/go
-                (try
-                  ~@body
-                  (catch js/Error e#
-                    (let [err-ch# (-error ~S)]
-                      (cljs.core.async/>! err-ch# e#)))
-                  (finally
-                    (-unregister-go ~S id#)
-                    ~@finally)))
-            (go
-              (try
-                ~@body
-                (catch Exception e#
-                  (let [err-ch# (-error ~S)]
-                    (>! err-ch# e#)))
-                (finally
-                  (-unregister-go ~S id#)
-                  ~@finally))))))))
-
+          (go
+            (try
+              ~@body
+              (catch ~e e#
+                (let [err-ch# (-error ~S)]
+                  (>! err-ch# e#)))
+              (finally
+                (-unregister-go ~S id#)
+                ~@finally)))))))
 
 #?(:clj
    (defmacro go-loop-super
@@ -814,20 +682,19 @@ Throws if any result is an exception or the context has been aborted."
   channels."
      {:style/indent 1}
      [S & body]
-     `(if-cljs
-       (throw (ex-info "thread-super not supported in cljs." {:code body}))
-       (let [id# (-register-go ~S (quote ~body))]
-         (thread
-           (try
-             ~@body
-             (catch #?(:clj Exception :cljs js/Error) e#
+     (if (:ns &env)
+       `(throw (ex-info "thread-super not supported in cljs." {:code body}))
+       `(let [id# (-register-go ~S (quote ~body))]
+          (thread
+            (try
+              ~@body
+              (catch #?(:clj Exception :cljs js/Error) e#
                  ;; bug in core.async:
                  ;; No method in multimethod '-item-to-ssa' for dispatch value: :protocol-invoke
-                 (let [err-ch# (-error ~S)]
-                   (put! err-ch# e#)))
-             (finally
-               (-unregister-go ~S id#))))))))
-
+                (let [err-ch# (-error ~S)]
+                  (put! err-ch# e#)))
+              (finally
+                (-unregister-go ~S id#))))))))
 
 (defn chan-super
   "Creates a supervised channel for transducer xform. Exceptions
@@ -838,6 +705,8 @@ Throws if any result is an exception or the context has been aborted."
 
 
 ;; taken from clojure/core ~ 1.7
+
+
 #?(:clj
    (defmacro ^{:private true} assert-args
      [& pairs]
@@ -847,7 +716,6 @@ Throws if any result is an exception or the context has been aborted."
           ~(let [more (nnext pairs)]
              (when more
                (list* `assert-args more))))))
-
 
 #?(:clj
    (defmacro go-for
@@ -900,22 +768,16 @@ Throws if any result is an exception or the context has been aborted."
                                          (let [~gxs (seq ~gxs)]
                                            (when-first [~bind ~gxs]
                                              ~(do-mod mod-pairs)))))))
-           res-ch (gensym "res_ch__")]
-       `(let [~res-ch (if-cljs (cljs.core.async/chan) (chan))
+           res-ch (gensym "res_ch__")
+           e (if (:ns &env) `js/Error Exception)]
+       `(let [~res-ch (chan)
               iter# ~(emit-bind res-ch (to-groups seq-exprs))]
-          (if-cljs (cljs.core.async.macros/go
-                     (try (<? ~S (iter# ~(second seq-exprs)))
-                          (catch js/Error e#
-                            (-track-exception ~S e#)
-                            (cljs.core.async/>! ~res-ch e#))
-                          (finally (cljs.core.async/close! ~res-ch))))
-                   (go (try (<? ~S (iter# ~(second seq-exprs)))
-                            (catch Exception e#
-                              (-track-exception ~S e#)
-                              (>! ~res-ch e#))
-                            (finally (async/close! ~res-ch)))))
+          (go (try (<? ~S (iter# ~(second seq-exprs)))
+                   (catch ~e e#
+                     (-track-exception ~S e#)
+                     (>! ~res-ch e#))
+                   (finally (async/close! ~res-ch))))
           ~res-ch))))
-
 
 (defn restarting-supervisor
   "Starts a subsystem with supervised go-routines initialized by start-fn.
@@ -962,9 +824,9 @@ Throws if any result is an exception or the context has been aborted."
         (when supervisor
           ;; this will trigger a close event when all subroutines are stopped
           (on-abort supervisor
-            (doseq [a ab-chs]
-              (put! a :abort)
-              (close! a))))
+                    (doseq [a ab-chs]
+                      (put! a :abort)
+                      (close! a))))
 
         (go-loop []
           (when-not (some async/poll! ab-chs)
@@ -989,7 +851,6 @@ Throws if any result is an exception or the context has been aborted."
               (<! (timeout 100))
               (recur (inc i)))
             (close! close-ch)))
-
 
         (let [[e? c] (alts! [err-ch close-ch] :priority true)]
           (if-not (= c close-ch) ;; an error occured
