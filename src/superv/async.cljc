@@ -7,11 +7,8 @@
                                                   on-abort go-super go-loop-super go-for alts?]]))
   #?(:clj (:import (clojure.core.async.impl.protocols ReadPort))))
 
-
-
 ;; The protocols and the binding are needed for the channel ops to be
 ;; transparent for supervision, most importantly exception tracking
-
 
 (defprotocol PSupervisor
   (-error [this])
@@ -99,12 +96,12 @@
     x))
 
 #?(:clj
-  (defmacro native-image-build? []
-    (try
-      (and (Class/forName "org.graalvm.nativeimage.ImageInfo")
-           #_(eval '(org.graalvm.nativeimage.ImageInfo/inImageBuildtimeCode)))
-      (catch Exception _
-        false))))
+   (defmacro native-image-build? []
+     (try
+       (and (Class/forName "org.graalvm.nativeimage.ImageInfo")
+            #_(eval '(org.graalvm.nativeimage.ImageInfo/inImageBuildtimeCode)))
+       (catch Exception _
+         false))))
 
 ;; a simple global instance, will probably be removed
 (def S
@@ -702,10 +699,7 @@ Throws if any result is an exception or the context has been aborted."
   [S buf-or-n xform]
   (chan buf-or-n xform (fn [e] (put! (:error S) e))))
 
-
-
 ;; taken from clojure/core ~ 1.7
-
 
 #?(:clj
    (defmacro ^{:private true} assert-args
