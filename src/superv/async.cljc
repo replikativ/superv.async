@@ -90,7 +90,9 @@
   to maintain a full stack trace when jumping between multiple contexts."
   [x]
   (if (instance? #?(:clj Exception :cljs js/Error) x)
-    (throw (ex-info (or (:clj (.getMessage ^Exception x)) (str x))
+    (throw (ex-info (or #?(:clj (.getMessage ^Exception x)
+                           :cljs (.-message x))
+                        (str x))
                     (or (ex-data x) {})
                     x))
     x))
@@ -108,10 +110,11 @@
   (try
     ;; We cannot run the simple-supervisor thread in a static context inside
     ;; native image.
-    (if (native-image-build?)
-      (dummy-supervisor)
-      (simple-supervisor))
-    (catch Exception _
+    #?(:clj (if (native-image-build?)
+              (dummy-supervisor)
+              (simple-supervisor))
+       :cljs (simple-supervisor))
+    (catch #?(:clj Exception :cljs js/Error) _
       (simple-supervisor))))
 
 (defn throw-if-exception
@@ -121,7 +124,8 @@
   [S x]
   (if (instance? #?(:clj Exception :cljs js/Error) x)
     (do (-free-exception S x)
-        (throw (ex-info (or (:clj (.getMessage ^Exception x)) (str x))
+        (throw (ex-info (or #?(:clj (.getMessage ^Exception x)
+                               :cljs (.-message x)) (str x))
                         (or (ex-data x) {})
                         x)))
     x))
