@@ -7,11 +7,8 @@
                                                   on-abort go-super go-loop-super go-for alts?]]))
   #?(:clj (:import (clojure.core.async.impl.protocols ReadPort))))
 
-
-
 ;; The protocols and the binding are needed for the channel ops to be
 ;; transparent for supervision, most importantly exception tracking
-
 
 (defprotocol PSupervisor
   (-error [this])
@@ -80,19 +77,45 @@
          (take! (timeout stale-timeout) pending))) nil)
     s))
 
+(defn dummy-supervisor []
+  (map->TrackingSupervisor
+   {:error (chan)
+    :aborts (vec (repeatedly NUM_ABORT_CHANS #(promise-chan)))
+    :registered (atom {})
+    :pending-exceptions (atom {})}))
+
 (defn throw-if-exception-
   "Helper method that checks if x is Exception and if yes, wraps it in a new
   exception, passing though ex-data if any, and throws it. The wrapping is done
   to maintain a full stack trace when jumping between multiple contexts."
   [x]
   (if (instance? #?(:clj Exception :cljs js/Error) x)
-    (throw (ex-info (or #?(:clj (.getMessage x)) (str x))
+    (throw (ex-info (or #?(:clj (.getMessage ^Exception x)
+                           :cljs (.-message x))
+                        (str x))
                     (or (ex-data x) {})
                     x))
     x))
 
+#?(:clj
+   (defmacro native-image-build? []
+     (try
+       (and (Class/forName "org.graalvm.nativeimage.ImageInfo")
+            #_(eval '(org.graalvm.nativeimage.ImageInfo/inImageBuildtimeCode)))
+       (catch Exception _
+         false))))
+
 ;; a simple global instance, will probably be removed
-(def S (simple-supervisor))
+(def S
+  (try
+    ;; We cannot run the simple-supervisor thread in a static context inside
+    ;; native image.
+    #?(:clj (if (native-image-build?)
+              (dummy-supervisor)
+              (simple-supervisor))
+       :cljs (simple-supervisor))
+    (catch #?(:clj Exception :cljs js/Error) _
+      (simple-supervisor))))
 
 (defn throw-if-exception
   "Helper method that checks if x is Exception and if yes, wraps it in a new
@@ -101,7 +124,8 @@
   [S x]
   (if (instance? #?(:clj Exception :cljs js/Error) x)
     (do (-free-exception S x)
-        (throw (ex-info (or #?(:clj (.getMessage x)) (str x))
+        (throw (ex-info (or #?(:clj (.getMessage ^Exception x)
+                               :cljs (.-message x)) (str x))
                         (or (ex-data x) {})
                         x)))
     x))
@@ -679,10 +703,7 @@ Throws if any result is an exception or the context has been aborted."
   [S buf-or-n xform]
   (chan buf-or-n xform (fn [e] (put! (:error S) e))))
 
-
-
 ;; taken from clojure/core ~ 1.7
-
 
 #?(:clj
    (defmacro ^{:private true} assert-args

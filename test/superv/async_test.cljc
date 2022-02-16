@@ -176,11 +176,7 @@
        (is (thrown? Exception
                     (<??* S [(go "1") (go (Exception.))]))))))
 
-
-
-
 ;; alt?
-
 
 (deftest test-alt?
   (testing "Test alt? error handling."
@@ -215,9 +211,7 @@
                     (<?? S (thread-try S
                                        (throw (ex-info "bar" {})))))))))
 
-
 ;; thread-super
-
 
 #?(:clj
    (deftest test-thread-super
@@ -237,10 +231,7 @@
                       (thread-super super (/ 1 0))
                       (<?? S err-ch)))))))
 
-
-
 ;; go-loop-try
-
 
 (deftest test-go-loop-try
   (test-async
@@ -278,9 +269,7 @@
                              (finally (reset! finally-state 42))))
              (= @exception-state @finally-state 42)))))))
 
-
 ;; go-loop-super
-
 
 (deftest test-go-loop-super
   (let [err-ch (chan)
@@ -296,9 +285,7 @@
      (go (is (thrown? #?(:clj Exception :cljs js/Error)
                       (<? super err-ch)))))))
 
-
 ;; go-for
-
 
 (deftest test-go-for ;; traditional for comprehension
   (test-async
@@ -327,10 +314,7 @@
                                     :let [b #?(:clj (/ 1 0) :cljs (throw (js/Error. "Oops")))]]
                                  42)))))))
 
-
-
 ;; supervisor
-
 
 (deftest test-supervisor
   (test-async
@@ -404,9 +388,7 @@
      (go (is (thrown? #?(:clj Exception :cljs js/Error)
                       (<? S (restarting-supervisor start-fn :retries 3 :stale-timeout 100))))))))
 
-
 ;; transducer embedding
-
 
 (deftest test-transducer-error-handling
   (let [err-ch (chan)
