@@ -18,3 +18,5 @@ figwheel_server.log
 /.calva
 out
 node_modules
+.clj-kondo/
+.lsp/

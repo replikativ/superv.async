@@ -2,10 +2,12 @@
   (:refer-clojure :exclude [test])
   (:require [clojure.tools.build.api :as b]
             [borkdude.gh-release-artifact :as gh]
-            [org.corfield.build :as bb]))
+            [deps-deploy.deps-deploy :as dd])
+  (:import (clojure.lang ExceptionInfo)))
 
 (def lib 'io.replikativ/superv.async)
 (def version (format "0.3.%s" (b/git-count-revs nil)))
+(def current-commit (gh/current-commit))
 (def class-dir "target/classes")
 (def basis (b/create-basis {:project "deps.edn"}))
 (def jar-file (format "target/%s-%s.jar" (name lib) version))
@@ -15,44 +17,60 @@
   (b/delete {:path "target"}))
 
 (defn jar
-  [opts]
-  (-> opts
-      (assoc :class-dir class-dir
-             :src-pom "./template/pom.xml"
-             :lib lib
-             :version version
-             :basis basis
-             :jar-file jar-file
-             :src-dirs ["src"])
-      bb/jar))
+  [_]
+  (b/write-pom {:class-dir class-dir
+                :src-pom "./template/pom.xml"
+                :lib lib
+                :version version
+                :basis basis
+                :src-dirs ["src"]})
+  (b/copy-dir {:src-dirs ["src" "resources"]
+               :target-dir class-dir})
+  (b/jar {:class-dir class-dir
+          :jar-file jar-file}))
 
-(defn test "Run the tests." [opts]
-  (bb/run-tests opts))
+(defn install
+  [_]
+  (clean nil)
+  (jar nil)
+  (b/install {:basis (b/create-basis {})
+              :lib lib
+              :version version
+              :jar-file jar-file
+              :class-dir class-dir}))
 
-(defn ci "Run the CI pipeline of tests (and build the JAR)." [opts]
-  (-> opts
-      (assoc :lib lib :version version)
-      (bb/run-tests)
-      (bb/clean)
-      (bb/jar)))
+(defn deploy
+  "Don't forget to set CLOJARS_USERNAME and CLOJARS_PASSWORD env vars."
+  [_]
+  (dd/deploy {:installer :remote :artifact jar-file
+              :pom-file (b/pom-path {:lib lib :class-dir class-dir})}))
 
-(defn install "Install the JAR locally." [opts]
-  (-> opts
-      jar
-      bb/install))
+(defn fib [a b]
+  (lazy-seq (cons a (fib b (+ a b)))))
 
-(defn deploy "Deploy the JAR to Clojars." [opts]
-  (-> opts
-      (assoc :lib lib :version version)
-      (bb/deploy)))
+(defn retry-with-fib-backoff [retries exec-fn test-fn]
+  (loop [idle-times (take retries (fib 1 2))]
+    (let [result (exec-fn)]
+      (if (test-fn result)
+        (when-let [sleep-ms (first idle-times)]
+          (println "Returned: " result)
+          (println "Retrying with remaining back-off times (in s): " idle-times)
+          (Thread/sleep (* 1000 sleep-ms))
+          (recur (rest idle-times)))
+        result))))
+
+(defn try-release []
+  (try (gh/overwrite-asset {:org "replikativ"
+                            :repo (name lib)
+                            :tag version
+                            :commit current-commit
+                            :file jar-file
+                            :content-type "application/java-archive"})
+       (catch ExceptionInfo e
+         (assoc (ex-data e) :failure? true))))
 
 (defn release
   [_]
-  (-> (gh/overwrite-asset {:org "replikativ"
-                           :repo (name lib)
-                           :tag version
-                           :commit (gh/current-commit)
-                           :file jar-file
-                           :content-type "application/java-archive"})
+  (-> (retry-with-fib-backoff 10 try-release :failure?)
       :url
       println))

@@ -5,7 +5,7 @@
     <artifactId>superv.async</artifactId>
     <packaging>jar</packaging>
     <name>superv.async</name>
-    <description>Supervised channel management for core.async.</description>
+     <description>Let it crash. The Erlang approach to build reliable systems.</description>
     <licenses>
         <license>
             <name>Eclipse</name>
