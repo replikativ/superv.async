@@ -17,4 +17,7 @@ figwheel_server.log
 .cpcache
 /.calva
 out
-node_modules
+node_modules.clj-kondo/
+.lsp/
+.clj-kondo/
+node_modules/
