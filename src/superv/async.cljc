@@ -172,7 +172,7 @@
                                {:body exps
                                 :finally-clauses finally})))
            finally (rest (first finally))
-           e (if (:ns &env) `js/Error Exception)]
+           e (if (:ns &env) `js/Error `Exception)]
        `(go
           (try
             ~@body
@@ -203,7 +203,7 @@
                             {:body exps
                              :finally-clauses finally})))
         finally (rest (first finally))
-        e (if (:ns &env) `js/Error Exception)]
+        e (if (:ns &env) `js/Error `Exception)]
     `(let [c#       (check-supervisor S)
            id#      (-register-go ~S (quote ~exps))]
        (go
@@ -655,7 +655,7 @@ Throws if any result is an exception or the context has been aborted."
                                      {:body            exps
                                       :finally-clauses finally})))
            finally (rest (first finally))
-           e (if (:ns &env) `js/Error Exception)]
+           e (if (:ns &env) `js/Error `Exception)]
        `(let [c#  (check-supervisor S)
               id# (-register-go ~S (quote ~body))]
           (go
@@ -767,7 +767,7 @@ Throws if any result is an exception or the context has been aborted."
                                            (when-first [~bind ~gxs]
                                              ~(do-mod mod-pairs)))))))
            res-ch (gensym "res_ch__")
-           e (if (:ns &env) `js/Error Exception)]
+           e (if (:ns &env) `js/Error `Exception)]
        `(let [~res-ch (chan)
               iter# ~(emit-bind res-ch (to-groups seq-exprs))]
           (go (try (<? ~S (iter# ~(second seq-exprs)))
