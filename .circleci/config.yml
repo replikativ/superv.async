@@ -4,52 +4,6 @@ orbs:
   tools: replikativ/clj-tools@0
 
 jobs:
-  setup:
-    executor: tools/clojurecli
-    parameters:
-      setup_cljs:
-        type: boolean
-        default: false
-    steps:
-      - restore_cache:
-          keys:
-            - source-{{ .Branch }}-{{ .Revision }}
-            - source-{{ .Branch }}
-            - source-
-      - checkout
-      - save_cache:
-          key: source-{{ .Branch }}-{{ .Revision }}
-          paths:
-            - .git
-      - restore_cache:
-          keys:
-            - deps-{{ checksum "deps.edn" }}
-            - deps-
-      - run:
-          name: resolve deps
-          command: clojure -P
-      - save_cache:
-          key: deps-{{ checksum "deps.edn" }}
-          paths:
-            - /home/circleci/.m2
-      - when:
-          condition: <<parameters.setup_cljs>>
-          steps:
-            - restore_cache:
-                keys:
-                  - npm-{{ checksum "package-lock.json" }}
-                  - npm-
-            - run: npm ci
-            - save_cache:
-                key: npm-{{ checksum "package-lock.json" }}
-                paths:
-                  - /home/circleci/.npm
-      - persist_to_workspace:
-          root: /home/circleci/
-          paths:
-            - .m2
-            - .npm
-            - replikativ
   build:
     executor: tools/clojurecli
     parameters:
@@ -78,65 +32,32 @@ jobs:
             - .m2
             - replikativ
 
-  test:
-    executor: tools/clojurecli
-    parameters:
-      test_cljs:
-        type: boolean
-        default: false
-    steps:
-      - attach_workspace:
-          at: /home/circleci
-      - run:
-          name: test
-          command: clojure -T:build test
-          no_output_timeout: 5m
-      - when:
-          condition: <<parameters.test_cljs>>
-          steps:
-            - run:
-                name: karma_test
-                command: ./bin/run-cljstests
-                no_output_timeout: 5m
-  deploy:
-    executor: tools/clojurecli
-    steps:
-      - attach_workspace:
-          at: /home/circleci
-      - run:
-          name: deploy
-          command: clojure -T:build deploy
-  release:
-    executor: tools/clojurecli
-    steps:
-      - attach_workspace:
-          at: /home/circleci
-      - run:
-          name: deploy
-          command: clojure -T:build release
-
-
 workflows:
   build-test-and-deploy:
     jobs:
-      - setup:
+      - tools/setup:
           context: clojars-deploy
           setup_cljs: false
       - build:
           context: clojars-deploy
           build_cljs: false
           requires:
-            - setup
+            - tools/setup
       - tools/format:
           context: clojars-deploy
           requires:
-            - setup
-      - test:
+            - tools/setup
+      - tools/unittest:
           context: clojars-deploy
           test_cljs: false
           requires:
             - build
-      - deploy:
+      - tools/cljstest:
+          context: clojars-deploy
+          test_cljs: false
+          requires:
+            - build
+      - tools/deploy:
           context: clojars-deploy
           filters:
             branches:
@@ -144,11 +65,11 @@ workflows:
           requires:
             - tools/format
             - test
-      - release:
+      - tools/release:
           context:
             - github-token
           filters:
             branches:
               only: main
           requires:
-            - deploy
+            - tools/deploy
