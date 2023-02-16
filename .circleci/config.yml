@@ -3,60 +3,33 @@ version: 2.1
 orbs:
   tools: replikativ/clj-tools@0
 
-jobs:
-  build:
-    executor: tools/clojurecli
-    parameters:
-      build_cljs:
-        type: boolean
-        default: false
-    steps:
-      - attach_workspace:
-          at: /home/circleci
-      - run:
-          name: clean
-          command: clojure -T:build clean
-      - run:
-          name: jar
-          command: clojure -T:build jar
-      - when:
-          condition: <<parameters.build_cljs>>
-          steps:
-            - run:
-                name: compile_cljs
-                command: npx shadow-cljs compile ci
-                no_output_timeout: 5m
-      - persist_to_workspace:
-          root: /home/circleci/
-          paths:
-            - .m2
-            - replikativ
-
 workflows:
   build-test-and-deploy:
     jobs:
       - tools/setup:
-          context: clojars-deploy
+          context: dockerhub-deploy
           setup_cljs: true
-      - build:
-          context: clojars-deploy
+      - tools/build:
+          context: dockerhub-deploy
           build_cljs: false
           requires:
             - tools/setup
       - tools/format:
-          context: clojars-deploy
+          context: dockerhub-deploy
           requires:
             - tools/setup
       - tools/unittest:
-          context: clojars-deploy
+          context: dockerhub-deploy
           requires:
-            - build
+            - tools/build
       - tools/cljstest:
-          context: clojars-deploy
+          context: dockerhub-deploy
           requires:
-            - build
+            - tools/build
       - tools/deploy:
-          context: clojars-deploy
+          context:
+            - clojars-deploy
+            - dockerhub-deploy
           filters:
             branches:
               only: main
@@ -67,6 +40,7 @@ workflows:
       - tools/release:
           context:
             - github-token
+            - dockerhub-deploy
           filters:
             branches:
               only: main
