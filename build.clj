@@ -5,6 +5,7 @@
             [org.corfield.build :as bb])
   (:import [clojure.lang ExceptionInfo]))
 
+(def org "replikativ")
 (def lib 'io.replikativ/superv.async)
 (def current-commit (b/git-process {:git-args "rev-parse HEAD"}))
 (def version (format "0.3.%s" (b/git-count-revs nil)))
@@ -63,7 +64,7 @@
         result))))
 
 (defn try-release []
-  (try (gh/overwrite-asset {:org "replikativ"
+  (try (gh/overwrite-asset {:org org
                             :repo (name lib)
                             :tag version
                             :commit (current-commit)
