@@ -37,7 +37,7 @@ workflows:
     jobs:
       - tools/setup:
           context: clojars-deploy
-          setup_cljs: false
+          setup_cljs: true
       - build:
           context: clojars-deploy
           build_cljs: false
