@@ -62,7 +62,8 @@ workflows:
               only: main
           requires:
             - tools/format
-            - test
+            - tools/unittest
+            - tools/cljstest
       - tools/release:
           context:
             - github-token
