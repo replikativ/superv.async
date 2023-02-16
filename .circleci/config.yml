@@ -49,7 +49,6 @@ workflows:
             - tools/setup
       - tools/unittest:
           context: clojars-deploy
-          test_cljs: false
           requires:
             - build
       - tools/cljstest:
