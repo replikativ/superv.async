@@ -1,7 +1,6 @@
 version: 2.1
 
 orbs:
-  github-cli: circleci/github-cli@1.0
   tools: replikativ/clj-tools@0
 
 jobs:
@@ -62,10 +61,10 @@ jobs:
           at: /home/circleci
       - run:
           name: clean
-          command: clojure -Sthreads 1 -T:build clean
+          command: clojure -T:build clean
       - run:
           name: jar
-          command: clojure -Sthreads 1 -T:build jar
+          command: clojure -T:build jar
       - when:
           condition: <<parameters.build_cljs>>
           steps:
@@ -90,7 +89,7 @@ jobs:
           at: /home/circleci
       - run:
           name: test
-          command: clojure -Sthreads 1 -T:build test
+          command: clojure -T:build test
           no_output_timeout: 5m
       - when:
           condition: <<parameters.test_cljs>>
@@ -106,7 +105,7 @@ jobs:
           at: /home/circleci
       - run:
           name: deploy
-          command: clojure -Sthreads 1 -T:build deploy
+          command: clojure -T:build deploy
   release:
     executor: tools/clojurecli
     steps:
@@ -114,7 +113,7 @@ jobs:
           at: /home/circleci
       - run:
           name: deploy
-          command: clojure -Sthreads 1 -T:build release
+          command: clojure -T:build release
 
 
 workflows:

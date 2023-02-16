@@ -3,11 +3,6 @@
 set -o errexit
 set -o pipefail
 
-if [[ -z CHROME_BIN ]]; then
-    echo "CHROME_BIN not set"
-    exit 1
-fi
-
 # Compile for browser
 npm run ci-test
 
