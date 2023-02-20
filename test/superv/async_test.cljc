@@ -329,14 +329,14 @@
        (go (is (thrown? #?(:clj Exception :cljs js/Error)
                         (<? S (restarting-supervisor start-fn :retries 3 :stale-timeout 100))))))
 
-        ;#?(:clj)  ;; TODO: get this one working in cljs
-     (let [try-fn (fn [S] (go-try S (throw (ex-info "stale" {}))))
-           start-fn (fn [S]
-                      (go-try S
-                              (try-fn S) ;; should trigger restart after max 2*stale-timeout
-                              42))]
-       (go (is (thrown? #?(:clj Exception :cljs js/Error))
-               (<? S (restarting-supervisor start-fn :retries 3 :stale-timeout 10))))))))
+     #?(:clj  ;; TODO: get this one working in cljs
+        (let [try-fn (fn [S] (go-try S (throw (ex-info "stale" {}))))
+              start-fn (fn [S]
+                         (go-try S
+                                 (try-fn S) ;; should trigger restart after max 2*stale-timeout
+                                 42))]
+          (go (is (thrown? #?(:clj Exception :cljs js/Error))
+                  (<? S (restarting-supervisor start-fn :retries 3 :stale-timeout 10)))))))))
 
 #_(deftest test-recover-publication
     (let [recovered-publication? (atom false)]

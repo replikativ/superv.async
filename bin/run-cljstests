@@ -7,4 +7,4 @@ set -o pipefail
 npm run ci-test
 
 # Compile for node
-# npx shadow-cljs compile node-test
+npx shadow-cljs compile node-test
