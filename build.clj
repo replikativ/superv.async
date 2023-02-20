@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [test])
   (:require [clojure.tools.build.api :as b]
             [borkdude.gh-release-artifact :as gh]
-            [org.corfield.build :as bb])
+            [deps-deploy.deps-deploy :as dd])
   (:import [clojure.lang ExceptionInfo]))
 
 (def org "replikativ")
@@ -18,36 +18,23 @@
   (b/delete {:path "target"}))
 
 (defn jar
-  [opts]
-  (-> opts
-      (assoc :class-dir class-dir
-             :src-pom "./template/pom.xml"
-             :lib lib
-             :version version
-             :basis basis
-             :jar-file jar-file
-             :src-dirs ["src"])
-      bb/jar))
+  [_]
+  (b/write-pom {:class-dir class-dir
+                :src-pom "./template/pom.xml"
+                :lib lib
+                :version version
+                :basis basis
+                :src-dirs ["src"]})
+  (b/copy-dir {:src-dirs ["src" "resources"]
+               :target-dir class-dir})
+  (b/jar {:class-dir class-dir
+          :jar-file jar-file}))
 
-(defn test "Run the tests." [opts]
-  (bb/run-tests opts))
-
-(defn ci "Run the CI pipeline of tests (and build the JAR)." [opts]
-  (-> opts
-      (assoc :lib lib :version version)
-      (bb/run-tests)
-      (bb/clean)
-      (bb/jar)))
-
-(defn install "Install the JAR locally." [opts]
-  (-> opts
-      jar
-      bb/install))
-
-(defn deploy "Deploy the JAR to Clojars." [opts]
-  (-> opts
-      (assoc :lib lib :version version)
-      (bb/deploy)))
+(defn deploy
+  "Don't forget to set CLOJARS_USERNAME and CLOJARS_PASSWORD env vars."
+  [_]
+  (dd/deploy {:installer :remote :artifact jar-file
+              :pom-file (b/pom-path {:lib lib :class-dir class-dir})}))
 
 (defn fib [a b]
   (lazy-seq (cons a (fib b (+ a b)))))
@@ -67,7 +54,7 @@
   (try (gh/overwrite-asset {:org org
                             :repo (name lib)
                             :tag version
-                            :commit (current-commit)
+                            :commit current-commit
                             :file jar-file
                             :content-type "application/java-archive"
                             :draft false})
@@ -79,3 +66,13 @@
   (-> (retry-with-fib-backoff 10 try-release :failure?)
       :url
       println))
+
+(defn install
+  [_]
+  (clean nil)
+  (jar nil)
+  (b/install {:basis (b/create-basis {})
+              :lib lib
+              :version version
+              :jar-file jar-file
+              :class-dir class-dir}))
