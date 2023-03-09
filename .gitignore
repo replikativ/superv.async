@@ -19,5 +19,6 @@ figwheel_server.log
 out
 node_modules.clj-kondo/
 .lsp/
-.clj-kondo/
+.cache
 node_modules/
+.vscode/

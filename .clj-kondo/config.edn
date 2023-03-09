@@ -1,0 +1,8 @@
+{:hooks {:macroexpand {superv.async/go-try- async/go-try-
+                       superv.async/go-try async/go-try
+                       superv.async/go-for async/go-for
+                       superv.async/go-loop-try- async/go-loop-try-
+                       superv.async/go-loop-try async/go-loop-try
+                       superv.async/go-loop-super async/go-loop-super}}
+ 
+ :linters {:clojure-lsp/unused-public-var {:exclude [build async]}}}
