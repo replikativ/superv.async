@@ -377,9 +377,9 @@ The input channel must be closed."
 Throws if any result is an exception or the context has been aborted."
      [S ch]
      `(clojure.core.async/alt! (-abort ~S)
-            ([v#] (throw (ex-info "Aborted operations" {:type :aborted})))
-            (go (<<! ~ch))
-            ([v#] (doall (mapv (fn [e#] (throw-if-exception ~S e#)) v#))))))
+                               ([v#] (throw (ex-info "Aborted operations" {:type :aborted})))
+                               (go (<<! ~ch))
+                               ([v#] (doall (mapv (fn [e#] (throw-if-exception ~S e#)) v#))))))
 
 ;; TODO lazy-seq vs. full vector in <<! ?
 #?(:clj
