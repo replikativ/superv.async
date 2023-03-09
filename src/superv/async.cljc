@@ -2,7 +2,7 @@
   #?(:clj (:gen-class :main true))
   (:require [clojure.core.async :as async :refer [<! alts! go go-loop promise-chan chan timeout put! close! take!
                                                   #?@(:clj [<!! alts!! thread])]]
-            #?(:cljs (cljs.core.async.impl.protocols :refer [ReadPort])))
+            #?(:cljs (cljs.core.async.impl.protocols)))
   #?(:cljs (:require-macros [superv.async :refer [wrap-abort! >? <? <?- go-try go-loop-try go-try- go-loop-try-
                                                   on-abort go-super go-loop-super go-for alts?]]))
   #?(:clj (:import [clojure.core.async.impl.protocols ReadPort]
@@ -147,8 +147,9 @@
 (defn chan?
   "Here until http://dev.clojure.org/jira/browse/ASYNC-74 is resolved."
   [x]
-  (satisfies? ReadPort x))
-
+  (satisfies? #?(:clj clojure.core.async.impl.protocols/ReadPort
+                 :cljs cljs.core.async.impl.protocols/ReadPort)
+              x))
 (defn- finally-exp? [exp]
   (not (and (seq? exp) (= (first exp) 'finally))))
 
@@ -325,7 +326,7 @@ deal with abortion."
    (defmacro >?
      "Same as core.async >! but throws an exception if the context has been aborted."
      [S ch m]
-     `(throw-if-exception ~S (wrap-abort! ~S (clojure.core.async.>! ~ch ~m)))))
+     `(throw-if-exception ~S (wrap-abort! ~S (clojure.core.async/>! ~ch ~m)))))
 
 (defn put?
   "Same as core.async/put!, but tracks exceptions in supervisor. TODO
@@ -360,7 +361,7 @@ deal with abortion."
      "Same as core.async alt! but throws an exception if the channel returns a
 throwable object or the context has been aborted."
      [S & clauses]
-     `(throw-if-exception ~S (wrap-abort! ~S (clojure.core.async.alt! ~@clauses)))))
+     `(throw-if-exception ~S (wrap-abort! ~S (clojure.core.async/alt! ~@clauses)))))
 
 #?(:clj
    (defmacro <<!
@@ -375,10 +376,10 @@ The input channel must be closed."
      "Takes multiple results from a channel and returns them as a vector.
 Throws if any result is an exception or the context has been aborted."
      [S ch]
-     `(clojure.core.async.alt! (-abort ~S)
-                               ([v#] (throw (ex-info "Aborted operations" {:type :aborted})))
-                               (go (<<! ~ch))
-                               ([v#] (doall (mapv (fn [e#] (throw-if-exception ~S e#)) v#))))))
+     `(clojure.core.async/alt! (-abort ~S)
+            ([v#] (throw (ex-info "Aborted operations" {:type :aborted})))
+            (go (<<! ~ch))
+            ([v#] (doall (mapv (fn [e#] (throw-if-exception ~S e#)) v#))))))
 
 ;; TODO lazy-seq vs. full vector in <<! ?
 #?(:clj
@@ -659,7 +660,7 @@ Throws if any result is an exception or the context has been aborted."
               ~@body
               (catch ~e e#
                 (let [err-ch# (-error ~S)]
-                  (clojure.core.async.>! err-ch# e#)))
+                  (clojure.core.async/>! err-ch# e#)))
               (finally
                 (-unregister-go ~S id#)
                 ~@finally)))))))
@@ -769,7 +770,7 @@ Throws if any result is an exception or the context has been aborted."
           (go (try (<? ~S (iter# ~(second seq-exprs)))
                    (catch ~e e#
                      (-track-exception ~S e#)
-                     (clojure.core.async.>! ~res-ch e#))
+                     (clojure.core.async/>! ~res-ch e#))
                    (finally (async/close! ~res-ch))))
           ~res-ch))))
 
