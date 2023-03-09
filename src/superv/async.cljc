@@ -1,11 +1,12 @@
 (ns superv.async
   #?(:clj (:gen-class :main true))
-  (:require [clojure.core.async :as async :refer [<! >! alt! alts! go go-loop promise-chan chan timeout put! close! take!
-                                                  #?@(:clj [<!! >!! alt!! alts!! thread])]]
+  (:require [clojure.core.async :as async :refer [<! alts! go go-loop promise-chan chan timeout put! close! take!
+                                                  #?@(:clj [<!! alts!! thread])]]
             #?(:cljs (cljs.core.async.impl.protocols :refer [ReadPort])))
   #?(:cljs (:require-macros [superv.async :refer [wrap-abort! >? <? <?- go-try go-loop-try go-try- go-loop-try-
                                                   on-abort go-super go-loop-super go-for alts?]]))
-  #?(:clj (:import (clojure.core.async.impl.protocols ReadPort))))
+  #?(:clj (:import [clojure.core.async.impl.protocols ReadPort]
+                   [java.util Date UUID])))
 
 ;; The protocols and the binding are needed for the channel ops to be
 ;; transparent for supervision, most importantly exception tracking
@@ -18,29 +19,27 @@
   (-track-exception [this e])
   (-free-exception [this e]))
 
-#?(:clj
-   (defn ^java.util.Date now []
-     (java.util.Date.))
-   :cljs (defn now []
-           (js/Date.)))
+(defn now
+  #?(:clj (^Date [] (Date.))
+     :cljs ([] (js/Date.))))
 
 (defrecord TrackingSupervisor [error aborts registered pending-exceptions]
   PSupervisor
-  (-error [this] error)
+  (-error [_this] error)
   ;; HACK: avoid too many pending takes on a single abort-ch
   ;; while this is somewhat hacky, it works without patching core.async
   ;; and is still bounded. The amount of total ops is also still bounded by a
   ;; million.
-  (-abort [this] (rand-nth aborts))
-  (-register-go [this body]
-    (let [id #?(:clj (java.util.UUID/randomUUID) :cljs (random-uuid))]
+  (-abort [_this] (rand-nth aborts))
+  (-register-go [_this body]
+    (let [id #?(:clj (UUID/randomUUID) :cljs (random-uuid))]
       (swap! registered assoc id body)
       id))
-  (-unregister-go [this id]
+  (-unregister-go [_this id]
     (swap! registered dissoc id))
-  (-track-exception [this e]
+  (-track-exception [_this e]
     (swap! pending-exceptions assoc e (now)))
-  (-free-exception [this e]
+  (-free-exception [_this e]
     (swap! pending-exceptions dissoc e)))
 
 (def ^:const NUM_ABORT_CHANS 1000)
@@ -50,7 +49,7 @@
   close its abort channel manually if you want the context to stop. It is
   supposed to be used at a boundary to an unsupervised system. If you want
   strong supervision, use the restarting-supervisor instead."
-  [& {:keys [stale-timeout error-fn pending-fn]
+  [& {:keys [stale-timeout error-fn]
       :or {stale-timeout (* 10 1000)
            error-fn (fn [e] (println "Supervisor:" e
                                      #?(:cljs (.-stack e))))}}]
@@ -65,7 +64,7 @@
                     (error-fn e)
                     (take! err-ch loop-fn)))
     ((fn pending [_]
-       (let [[[e _]] (filter (fn [[k v]]
+       (let [[[e _]] (filter (fn [[_k v]]
                                (> (- (.getTime (now)) stale-timeout)
                                   #?(:clj (.getTime ^java.util.Date v)
                                      :cljs (.getTime v))))
@@ -148,9 +147,7 @@
 (defn chan?
   "Here until http://dev.clojure.org/jira/browse/ASYNC-74 is resolved."
   [x]
-  (satisfies? #?(:clj clojure.core.async.impl.protocols/ReadPort
-                 :cljs cljs.core.async.impl.protocols/ReadPort)
-              x))
+  (satisfies? ReadPort x))
 
 (defn- finally-exp? [exp]
   (not (and (seq? exp) (= (first exp) 'finally))))
@@ -180,12 +177,11 @@
               e#)
             (finally ~@finally))))))
 
-#?(:clj
-   (defmacro go-loop-try-
-     "Loop binding for go-try-."
-     {:style/indent 2}
-     [bindings & body]
-     `(go-try- ~S (loop ~bindings ~@body))))
+(defmacro go-loop-try-
+  "Loop binding for go-try-."
+  {:style/indent 2}
+  [bindings & body]
+  `(go-try- (loop ~bindings ~@body)))
 
 (defmacro go-try
   "Asynchronously executes the body in a go block. You can provide catch and
@@ -329,7 +325,7 @@ deal with abortion."
    (defmacro >?
      "Same as core.async >! but throws an exception if the context has been aborted."
      [S ch m]
-     `(throw-if-exception ~S (wrap-abort! ~S (>! ~ch ~m)))))
+     `(throw-if-exception ~S (wrap-abort! ~S (clojure.core.async.>! ~ch ~m)))))
 
 (defn put?
   "Same as core.async/put!, but tracks exceptions in supervisor. TODO
@@ -364,7 +360,7 @@ deal with abortion."
      "Same as core.async alt! but throws an exception if the channel returns a
 throwable object or the context has been aborted."
      [S & clauses]
-     `(throw-if-exception ~S (wrap-abort! ~S (alt! ~@clauses)))))
+     `(throw-if-exception ~S (wrap-abort! ~S (clojure.core.async.alt! ~@clauses)))))
 
 #?(:clj
    (defmacro <<!
@@ -379,7 +375,7 @@ The input channel must be closed."
      "Takes multiple results from a channel and returns them as a vector.
 Throws if any result is an exception or the context has been aborted."
      [S ch]
-     `(alt! (-abort ~S)
+     `(clojure.core.async.alt! (-abort ~S)
             ([v#] (throw (ex-info "Aborted operations" {:type :aborted})))
             (go (<<! ~ch))
             ([v#] (doall (mapv (fn [e#] (throw-if-exception ~S e#)) v#))))))
@@ -663,7 +659,7 @@ Throws if any result is an exception or the context has been aborted."
               ~@body
               (catch ~e e#
                 (let [err-ch# (-error ~S)]
-                  (>! err-ch# e#)))
+                  (clojure.core.async.>! err-ch# e#)))
               (finally
                 (-unregister-go ~S id#)
                 ~@finally)))))))
@@ -739,11 +735,11 @@ Throws if any result is an exception or the context has been aborted."
                                    (conj groups [k v])))
                                [] (partition 2 seq-exprs)))
            err (fn [& msg] (throw (IllegalArgumentException. ^String (apply str msg))))
-           emit-bind (fn emit-bind [res-ch [[bind expr & mod-pairs]
+           emit-bind (fn emit-bind [res-ch [[bind _expr & mod-pairs]
                                             & [[_ next-expr] :as next-groups]]]
                        (let [giter (gensym "iter__")
                              gxs (gensym "s__")
-                             do-mod (fn do-mod [[[k v :as pair] & etc]]
+                             do-mod (fn do-mod [[[k v] & etc]]
                                       (cond
                                         (= k :let) `(let ~v ~(do-mod etc))
                                         (= k :while) `(when ~v ~(do-mod etc))
@@ -773,7 +769,7 @@ Throws if any result is an exception or the context has been aborted."
           (go (try (<? ~S (iter# ~(second seq-exprs)))
                    (catch ~e e#
                      (-track-exception ~S e#)
-                     (>! ~res-ch e#))
+                     (clojure.core.async.>! ~res-ch e#))
                    (finally (async/close! ~res-ch))))
           ~res-ch))))
 
@@ -817,7 +813,7 @@ Throws if any result is an exception or the context has been aborted."
                                         :pending-exceptions (atom {})
                                         :restarting true})
             res-ch (start-fn s)
-            stale-timeout 1000]
+            stale-after stale-timeout]
 
         (when supervisor
           ;; this will trigger a close event when all subroutines are stopped
@@ -828,9 +824,9 @@ Throws if any result is an exception or the context has been aborted."
 
         (go-loop []
           (when-not (some async/poll! ab-chs)
-            (<! (timeout stale-timeout))
-            (let [[[e _]] (filter (fn [[k v]]
-                                    (> (- (.getTime (now)) stale-timeout)
+            (<! (timeout stale-after))
+            (let [[[e _]] (filter (fn [[_k v]]
+                                    (> (- (.getTime (now)) stale-after)
                                        (.getTime v)))
                                   @(:pending-exceptions s))]
               (if e

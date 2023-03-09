@@ -1,8 +1,9 @@
 (ns superv.async-test
   (:require [clojure.test :refer [deftest is testing #?@(:cljs [async])]]
-            [clojure.core.async :as async :refer [<! >! go chan close! alt! timeout chan close! take! to-chan! put! pub sub onto-chan!
-                                                  #?@(:clj [<!! >!!])]]
-            [superv.async :refer [<? <?- >? S go-try go-try- <<! <<? <?* concat>> partition-all>> count> pmap>> alt? alts? restarting-supervisor go-super go-for map->TrackingSupervisor on-abort put? chan-super go-loop-try go-loop-super
+            [clojure.core.async :as async :refer [<! >! go chan close! timeout chan close! to-chan! onto-chan! #_put! #_pub #_sub
+                                                  #?@(:clj [<!! >!!]
+                                                      :cljs [take!])]]
+            [superv.async :refer [<? <?- >? S go-try go-try- <<! <<? <?* concat>> partition-all>> count> pmap>> alt? alts? restarting-supervisor go-super go-for map->TrackingSupervisor on-abort #_put? chan-super go-loop-try go-loop-super
                                   #?@(:clj [<<!! <<?? <?? <!!* <??* thread-try thread-super reduce< <?? chan-super])]]))
 
 (defn test-async
@@ -47,7 +48,7 @@
                          #?(:clj (/ 1 0)
                             :cljs (throw (js/Error. "Oops")))
                          (catch #?(:clj java.lang.ArithmeticException
-                                   :cljs js/Error) e
+                                   :cljs js/Error) _
                            (reset! exception-state 42))
                          (finally (reset! finally-state 42))))
            (= @exception-state @finally-state 42))))))
@@ -63,7 +64,7 @@
                  #?(:clj (/ 1 0)
                     :cljs (throw (js/Error. "Oops")))
                  (catch #?(:clj java.lang.ArithmeticException
-                           :cljs js/Error) e
+                           :cljs js/Error) _e
                    (reset! exception-state 42))
                  (finally (reset! finally-state 42))))
            (= @exception-state @finally-state 42))))))
@@ -238,7 +239,7 @@
    (go
      (is
       (thrown? #?(:clj Exception :cljs js/Error)
-               (<? S (go-loop-try S [[f & r] [1 0]]
+               (<? S (go-loop-try S [[#?(:clj f :cljs _) & r] [1 0]]
                                   #?(:clj (/ 1 f)
                                         ;; TODO - Better JS error. In cljs this never terminates without an explicit thrown error
                                      :cljs (throw (js/Error. "Oops")))
@@ -276,7 +277,7 @@
         abort (chan)
         super (map->TrackingSupervisor {:error err-ch :abort abort
                                         :registered (atom {})})]
-    (go-loop-super super [[f & r] [1 0]]
+    (go-loop-super super [[#?(:clj f :cljs _) & r] [1 0]]
                    #?(:clj (/ 1 f)
                                 ;; TODO - Better JS error. In cljs this never terminates without an explicit thrown error
                       :cljs (throw (js/Error. "Oops")))
@@ -310,8 +311,8 @@
                                  #?(:clj (/ a b)
                                     :cljs (get-in a b))))))
      (is (thrown? #?(:clj Exception :cljs js/Error)
-                  (<<? S (go-for S [a [1 2 3]
-                                    :let [b #?(:clj (/ 1 0) :cljs (throw (js/Error. "Oops")))]]
+                  (<<? S (go-for S [_a [1 2 3]
+                                    :let [_b #?(:clj (/ 1 0) :cljs (throw (js/Error. "Oops")))]]
                                  42)))))))
 
 ;; supervisor

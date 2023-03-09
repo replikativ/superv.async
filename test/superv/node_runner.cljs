@@ -9,7 +9,7 @@
    (cljs.test/run-tests (merge (cljs.test/empty-env) opts)
                         'superv.async-test)))
 
-(defn -main [& args]
+(defn -main [& _args]
   (cljs.nodejs/enable-util-print!)
   (defmethod cljs.test/report [:cljs.test/default :end-run-tests] [_] (js/process.exit 0))
   (run-tests))

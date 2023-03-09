@@ -1,0 +1,12 @@
+{:hooks {#_:analyze-call #_{superv.async/go-try- hooks.go-try-/go-try-
+                        superv.async/go-try hooks.go-try/go-try 
+                        superv.async/go-loop-try- hooks.go-loop-try-/go-loop-try-
+                        superv.async/go-loop-try hooks.go-loop-try/go-loop-try}
+         :macroexpand {superv.async/go-try- async/go-try-
+                       superv.async/go-try async/go-try
+                       superv.async/go-for async/go-for
+                       superv.async/go-loop-try- async/go-loop-try-
+                       superv.async/go-loop-try async/go-loop-try
+                       superv.async/go-loop-super async/go-loop-super}}
+ 
+ :linters {:clojure-lsp/unused-public-var {:exclude [build]}}}

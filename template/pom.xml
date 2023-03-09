@@ -6,6 +6,7 @@
     <packaging>jar</packaging>
     <name>superv.async</name>
     <description>Supervised channel management for core.async.</description>
+    <version>0.0.0</version>
     <licenses>
         <license>
             <name>Eclipse</name>
