@@ -18,13 +18,12 @@
                       :exec-fn cognitect.test-runner.api/test}
            :cljs-test {:extra-paths ["test"]
                        :main-opts ["-m" "cljs.main" "-t" "node" "-m" "superv.node-runner"]}
-           :build  {:deps       {io.github.seancorfield/build-clj {:git/tag "v0.6.7"
-                                                                   :git/sha "22c2d09"}
-                                 borkdude/gh-release-artifact     {:git/url "https://github.com/borkdude/gh-release-artifact"
-                                                                   :sha     "a83ee8da47d56a80b6380cbb6b4b9274048067bd"}
-                                 babashka/babashka.curl           {:mvn/version "0.1.1"}
-                                 babashka/fs                      {:mvn/version "0.1.2"}
-                                 cheshire/cheshire                {:mvn/version "5.10.2"}}
+           :build  {:deps {io.github.clojure/tools.build          {:mvn/version "0.9.3"}
+                           slipset/deps-deploy                    {:mvn/version "0.2.0"}
+                           io.github.borkdude/gh-release-artifact {:git/sha "05f8d8659e6805d513c59447ff41dc8497878462"}
+                           babashka/babashka.curl                 {:mvn/version "0.1.2"}
+                           babashka/fs                            {:mvn/version "0.1.6"}
+                           cheshire/cheshire                      {:mvn/version "5.10.2"}}
                     :ns-default build}
            :ffix   {:extra-deps {cljfmt/cljfmt {:mvn/version "0.9.2"}}
                     :main-opts  ["-m" "cljfmt.main" "fix"]}
