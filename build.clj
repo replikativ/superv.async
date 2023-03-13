@@ -8,7 +8,7 @@
 (def org "replikativ")
 (def lib 'io.replikativ/superv.async)
 (def current-commit (b/git-process {:git-args "rev-parse HEAD"}))
-(def version (format "0.3.%s" (b/git-count-revs nil)))
+(def version (format "0.7.%s" (b/git-count-revs nil)))
 (def class-dir "target/classes")
 (def basis (b/create-basis {:project "deps.edn"}))
 (def jar-file (format "target/%s-%s.jar" (name lib) version))
@@ -44,11 +44,11 @@
     (let [result (exec-fn)]
       (if (test-fn result)
         (do (println "Returned: " result)
-          (if-let [sleep-ms (first idle-times)]
-            (do (println "Retrying with remaining back-off times (in s): " idle-times)
-                (Thread/sleep (* 1000 sleep-ms))
-                (recur (rest idle-times)))
-            result))
+            (if-let [sleep-ms (first idle-times)]
+              (do (println "Retrying with remaining back-off times (in s): " idle-times)
+                  (Thread/sleep (* 1000 sleep-ms))
+                  (recur (rest idle-times)))
+              result))
         result))))
 
 (defn try-release []
@@ -64,6 +64,7 @@
 
 (defn release
   [_]
+  (println "Trying to release artifact...")
   (let [ret (retry-with-fib-backoff 10 try-release :failure?)]
     (if (:failure? ret)
       (do (println "GitHub release failed!")
