@@ -831,7 +831,7 @@ Throws if any result is an exception or the context has been aborted."
             (<! (timeout stale-timeout))
             (let [[[e _]] (filter (fn [[k v]]
                                     (> (- (.getTime (now)) stale-timeout)
-                                       (.getTime v)))
+                                       (.getTime ^java.util.Date v)))
                                   @(:pending-exceptions s))]
               (if e
                 (do
