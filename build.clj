@@ -6,7 +6,7 @@
   (:import [clojure.lang ExceptionInfo]))
 
 (def org "replikativ")
-(def lib 'io.replikativ/superv.async)
+(def lib 'org.replikativ/superv.async)
 (def current-commit (b/git-process {:git-args "rev-parse HEAD"}))
 (def version (format "0.3.%s" (b/git-count-revs nil)))
 (def class-dir "target/classes")
