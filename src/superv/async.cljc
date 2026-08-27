@@ -45,6 +45,30 @@
 
 (def ^:const NUM_ABORT_CHANS 1000)
 
+(defn- schedule-stale-check!
+  "Re-arm the supervisor's stale-exception sweep.
+
+  On the JVM (and in a browser) this is a core.async timeout, as it always was.
+
+  On Node it is a raw `setTimeout` whose handle is `unref`'d. `S` below is a
+  top-level `def`, so merely REQUIRING this namespace starts the sweep, and a
+  referenced timer keeps Node's event loop alive forever: `node -e
+  'require(\"some-lib-that-loads-this\")'` never exits. That is silent — nothing
+  errors, the process simply hangs — and it reaches every script, test runner,
+  CI job and Lambda that loads a library depending on superv.async. An unref'd
+  timer still fires while other work keeps the process alive, which is exactly
+  the supervision this sweep provides, but it no longer prevents exit.
+
+  `unref` is Node-only; browsers return a plain number from `setTimeout`, so the
+  call is guarded and falls back to the core.async path there."
+  [stale-timeout f]
+  #?(:clj (take! (timeout stale-timeout) f)
+     :cljs (let [t (js/setTimeout #(f nil) stale-timeout)]
+             (if (and (some? t) (fn? (unchecked-get t "unref")))
+               (do (.unref t) nil)
+               ;; Browser: no unref, and no event loop to hold open either.
+               nil))))
+
 (defn simple-supervisor
   "A simple supervisor which deals with errors through callbacks. You need to
   close its abort channel manually if you want the context to stop. It is
@@ -74,7 +98,7 @@
          (when e
            (error-fn e)
            (-free-exception s e))
-         (take! (timeout stale-timeout) pending))) nil)
+         (schedule-stale-check! stale-timeout pending))) nil)
     s))
 
 (defn dummy-supervisor []
