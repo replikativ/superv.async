@@ -20,4 +20,8 @@
   
   :ci
   {:target :karma
-   :output-to "target/ci.js"}}}
+   :output-to "target/ci.js"
+   :compiler-options {:warnings-as-errors true
+                      ;; core.async emits terminal expressions in generated
+                      ;; state machines that Closure reports as useless code.
+                      :closure-warnings {:useless-code :off}}}}}
