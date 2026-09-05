@@ -1,0 +1,16 @@
+;; Exported to consumers. superv.async's macros take a supervisor as their
+;; first argument, which clj-kondo cannot interpret on its own: the forms with
+;; a binding vector then report every binding as an unresolved symbol and every
+;; `recur` as the wrong arity, and a project that lints as a gate cannot pass.
+{:hooks {:analyze-call {superv.async/go-loop-try   hooks.superv-async/go-loop
+                        superv.async/go-loop-try-  hooks.superv-async/go-loop
+                        superv.async/go-loop-super hooks.superv-async/go-loop
+                        superv.async/go-for        hooks.superv-async/go-for}}
+ ;; The rest take `[S & body]` and evaluate the supervisor, so `do` describes
+ ;; them exactly.
+ :lint-as {superv.async/go-try      clojure.core/do
+           superv.async/go-try-     clojure.core/do
+           superv.async/go-super    clojure.core/do
+           superv.async/thread-try   clojure.core/do
+           superv.async/thread-super clojure.core/do
+           superv.async/restarting-supervisor clojure.core/do}}
