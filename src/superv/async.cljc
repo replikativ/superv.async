@@ -801,6 +801,44 @@ Throws if any result is an exception or the context has been aborted."
                    (finally (async/close! ~res-ch))))
           ~res-ch))))
 
+(defn- watch-stale-exceptions!
+  "Watch `s`'s pending exceptions and push the first one that has gone stale onto `err-ch`,
+   until the supervisor aborts. Fire-and-forget: the returned channel is discarded.
+
+   A TOP-LEVEL fn rather than a `go-loop` inlined in `restarting-supervisor`: an inner go
+   block macroexpands into a complete state machine, and the enclosing `go-loop`'s ioc
+   transform then has to analyse all of that generated code. Measured, the two inner loops
+   made `restarting-supervisor` alone 1.0 s of this namespace's 2.35 s load — paid by every
+   consumer of `go-try-`/`<?-`, none of which ever calls a supervisor."
+  [s ab-chs err-ch stale-timeout log-fn]
+  (go-loop []
+    (when-not (some async/poll! ab-chs)
+      (<! (timeout stale-timeout))
+      (let [[[e _]] (filter (fn [[k v]]
+                              (> (- (.getTime (now)) stale-timeout)
+                                 (.getTime ^java.util.Date v)))
+                            @(:pending-exceptions s))]
+        (if e
+          (do
+            (when-not (= (:type (ex-data e)) :aborted)
+              (log-fn :info {:event :stale-error-in-supervisor
+                             :error e}))
+            (-free-exception s e)
+            (put! err-ch e))
+          (recur))))))
+
+(defn- close-when-quiescent!
+  "Close `close-ch` once `s` has no registered routines and no pending exceptions.
+   Fire-and-forget; top-level for the same reason as `watch-stale-exceptions!`."
+  [s close-ch]
+  (go-loop [i 0]
+    (if-not (and (empty? @(:registered s))
+                 (empty? @(:pending-exceptions s)))
+      (do
+        (<! (timeout 100))
+        (recur (inc i)))
+      (close! close-ch))))
+
 (defn restarting-supervisor
   "Starts a subsystem with supervised go-routines initialized by start-fn.
   Restarts the system on error for retries times with a potential delay in
@@ -850,29 +888,9 @@ Throws if any result is an exception or the context has been aborted."
                       (put! a :abort)
                       (close! a))))
 
-        (go-loop []
-          (when-not (some async/poll! ab-chs)
-            (<! (timeout stale-timeout))
-            (let [[[e _]] (filter (fn [[k v]]
-                                    (> (- (.getTime (now)) stale-timeout)
-                                       (.getTime ^java.util.Date v)))
-                                  @(:pending-exceptions s))]
-              (if e
-                (do
-                  (when-not (= (:type (ex-data e)) :aborted)
-                    (log-fn :info {:event :stale-error-in-supervisor
-                                   :error e}))
-                  (-free-exception s e)
-                  (put! err-ch e))
-                (recur)))))
+        (watch-stale-exceptions! s ab-chs err-ch stale-timeout log-fn)
 
-        (go-loop [i 0]
-          (if-not (and (empty? @(:registered s))
-                       (empty? @(:pending-exceptions s)))
-            (do
-              (<! (timeout 100))
-              (recur (inc i)))
-            (close! close-ch)))
+        (close-when-quiescent! s close-ch)
 
         (let [[e? c] (alts! [err-ch close-ch] :priority true)]
           (if-not (= c close-ch) ;; an error occured
