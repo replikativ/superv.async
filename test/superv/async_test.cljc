@@ -2,7 +2,7 @@
   (:require [clojure.test :refer [deftest is testing #?@(:cljs [async])]]
             [clojure.core.async :as async :refer [<! >! go chan close! alt! timeout chan close! take! to-chan! put! pub sub onto-chan!
                                                   #?@(:clj [<!! >!!])]]
-            [superv.async :refer [<? <?- >? S go-try go-try- <<! <<? <?* concat>> partition-all>> count> pmap>> alt? alts? restarting-supervisor go-super go-for map->TrackingSupervisor on-abort put? chan-super go-loop-try go-loop-super
+            [superv.async :refer [<? <?- >? S go-try go-try- <<! <<? <?* concat>> partition-all>> count> pmap>> alt? alts? restarting-supervisor go-super go-for map->TrackingSupervisor on-abort put? chan-super go-loop-try go-loop-try- go-loop-super
                                   #?@(:clj [<<!! <<?? <?? <!!* <??* thread-try thread-super reduce< <?? chan-super])]]))
 
 (defn test-async
@@ -14,6 +14,13 @@
 (defn e []
   #?(:clj (Exception.)
      :cljs (js/Error.)))
+
+(defn rejects-invalid-supervisor? [f]
+  (try
+    (f)
+    false
+    (catch #?(:clj Exception :cljs js/Error) e
+      (= {:argument nil} (ex-data e)))))
 
 (deftest test-<?
   (test-async
@@ -36,6 +43,7 @@
             "foo")))))
 
 (deftest test-go-try-<?
+  (is (rejects-invalid-supervisor? #(go-try nil 42)))
   (test-async
    (go
      (is (thrown? #?(:clj Exception :cljs js/Error)
@@ -67,6 +75,18 @@
                    (reset! exception-state 42))
                  (finally (reset! finally-state 42))))
            (= @exception-state @finally-state 42))))))
+
+(deftest test-supervisor-expression-evaluated-once
+  (test-async
+   (go
+     (let [evaluations (atom 0)
+           supervisor #(do (swap! evaluations inc) S)]
+       (is (= 42 (<? S (go-try (supervisor) 42))))
+       (is (= 1 @evaluations)))
+     (let [evaluations (atom 0)
+           supervisor #(do (swap! evaluations inc) S)]
+       (is (= 42 (<? S (go-super (supervisor) 42))))
+       (is (= 1 @evaluations))))))
 
 (deftest test-<<!
   (test-async
@@ -205,8 +225,13 @@
 #?(:clj
    (deftest test-thread-try
      (testing "Test threading macro."
+       (is (rejects-invalid-supervisor? #(thread-try nil 42)))
        (is (= (<?? S (thread-try S 42))
               42))
+       (let [evaluations (atom 0)
+             supervisor #(do (swap! evaluations inc) S)]
+         (is (= 42 (<?? S (thread-try (supervisor) 42))))
+         (is (= 1 @evaluations)))
        (is (thrown? Exception
                     (<?? S (thread-try S
                                        (throw (ex-info "bar" {})))))))))
@@ -244,8 +269,23 @@
                                      :cljs (throw (js/Error. "Oops")))
                                   (recur r))))))))
 
+(deftest test-go-loop-try-
+  (test-async
+   (go
+     (is (= 10 (<?- (go-loop-try- [i 0 acc 0]
+                                  (if (< i 5)
+                                    (recur (inc i) (+ acc i))
+                                    acc))))))))
+
+#?(:clj
+   (deftest test-go-loop-try--expansion
+     (let [expansion (macroexpand-1 '(superv.async/go-loop-try- [i 0] i))]
+       (is (= 'superv.async/go-try- (first expansion)))
+       (is (= 2 (count expansion))))))
+
 ;; go-super
 (deftest test-go-super
+  (is (rejects-invalid-supervisor? #(go-super nil 42)))
   (let [err-ch (chan)
         abort (chan)
         super (map->TrackingSupervisor {:error err-ch :abort abort

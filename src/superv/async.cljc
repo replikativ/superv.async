@@ -209,7 +209,7 @@
      "Loop binding for go-try-."
      {:style/indent 2}
      [bindings & body]
-     `(go-try- ~S (loop ~bindings ~@body))))
+     `(go-try- (loop ~bindings ~@body))))
 
 (defmacro go-try
   "Asynchronously executes the body in a go block. You can provide catch and
@@ -228,17 +228,18 @@
                              :finally-clauses finally})))
         finally (rest (first finally))
         e (if (:ns &env) `js/Error `Exception)]
-    `(let [c#       (check-supervisor S)
-           id#      (-register-go ~S (quote ~exps))]
+    `(let [supervisor# ~S
+           _#          (check-supervisor supervisor#)
+           id#         (-register-go supervisor# (quote ~exps))]
        (go
          (try ~@body
               (catch ~e e#
                 (when-not (= (:type (ex-data e#))
                              :aborted)
-                  (-track-exception ~S e#))
+                  (-track-exception supervisor# e#))
                 e#)
               (finally
-                (-unregister-go ~S id#)
+                (-unregister-go supervisor# id#)
                 ~@finally))))))
 
 (defmacro go-loop-try
@@ -263,18 +264,19 @@
            finally (rest (first finally))]
        (if (:ns &env)
          (throw (ex-info "thread-try is not supported in cljs." {:code body}))
-         `(let [c#  (check-supervisor S)
-                id# (-register-go ~S (quote ~body))]
+         `(let [supervisor# ~S
+                _#          (check-supervisor supervisor#)
+                id#         (-register-go supervisor# (quote ~body))]
             (thread
               (try
                 ~@body
                 (catch Exception e#
                   (when-not (= (:type (ex-data e#))
                                :aborted)
-                    (-track-exception ~S e#))
+                    (-track-exception supervisor# e#))
                   e#)
                 (finally
-                  (-unregister-go ~S id#)
+                  (-unregister-go supervisor# id#)
                   ~@finally))))))))
 
 #?(:clj
@@ -680,16 +682,17 @@ Throws if any result is an exception or the context has been aborted."
                                       :finally-clauses finally})))
            finally (rest (first finally))
            e (if (:ns &env) `js/Error `Exception)]
-       `(let [c#  (check-supervisor S)
-              id# (-register-go ~S (quote ~body))]
+       `(let [supervisor# ~S
+              _#          (check-supervisor supervisor#)
+              id#         (-register-go supervisor# (quote ~body))]
           (go
             (try
               ~@body
               (catch ~e e#
-                (let [err-ch# (-error ~S)]
+                (let [err-ch# (-error supervisor#)]
                   (>! err-ch# e#)))
               (finally
-                (-unregister-go ~S id#)
+                (-unregister-go supervisor# id#)
                 ~@finally)))))))
 
 #?(:clj
