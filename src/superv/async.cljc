@@ -806,28 +806,32 @@ Throws if any result is an exception or the context has been aborted."
 
 (defn- watch-stale-exceptions!
   "Watch `s`'s pending exceptions and push the first one that has gone stale onto `err-ch`,
-   until the supervisor aborts. Fire-and-forget: the returned channel is discarded.
+   until physical join completes. During abort, reclaim abandoned exceptions
+   without sending them back to the closed error channel: a consumer may have
+   selected abort while its native operation subsequently failed.
+   Fire-and-forget: the returned channel is discarded.
 
    A TOP-LEVEL fn rather than a `go-loop` inlined in `restarting-supervisor`: an inner go
    block macroexpands into a complete state machine, and the enclosing `go-loop`'s ioc
    transform then has to analyse all of that generated code. Measured, the two inner loops
    made `restarting-supervisor` alone 1.0 s of this namespace's 2.35 s load — paid by every
    consumer of `go-try-`/`<?-`, none of which ever calls a supervisor."
-  [s ab-chs err-ch stale-timeout log-fn]
+  [s ab-chs err-ch close-ch stale-timeout log-fn]
   (go-loop []
-    (when-not (some async/poll! ab-chs)
-      (<! (timeout stale-timeout))
-      (let [[[e _]] (filter (fn [[k v]]
-                              (> (- (.getTime (now)) stale-timeout)
-                                 (.getTime ^java.util.Date v)))
-                            @(:pending-exceptions s))]
-        (if e
-          (do
+    (let [[_ port] (alts! [close-ch (timeout stale-timeout)] :priority true)]
+      (when-not (= port close-ch)
+        (let [aborted? (some async/poll! ab-chs)
+              [[e _]] (filter (fn [[_ at]]
+                                (or aborted?
+                                    (> (- (.getTime (now)) stale-timeout)
+                                       (.getTime ^java.util.Date at))))
+                              @(:pending-exceptions s))]
+          (when e
             (when-not (= (:type (ex-data e)) :aborted)
               (log-fn :info {:event :stale-error-in-supervisor
                              :error e}))
             (-free-exception s e)
-            (put! err-ch e))
+            (when-not aborted? (put! err-ch e)))
           (recur))))))
 
 (defn- close-when-quiescent!
@@ -891,7 +895,7 @@ Throws if any result is an exception or the context has been aborted."
                       (put! a :abort)
                       (close! a))))
 
-        (watch-stale-exceptions! s ab-chs err-ch stale-timeout log-fn)
+        (watch-stale-exceptions! s ab-chs err-ch close-ch stale-timeout log-fn)
 
         (close-when-quiescent! s close-ch)
 

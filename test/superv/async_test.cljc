@@ -2,8 +2,8 @@
   (:require [clojure.test :refer [deftest is testing #?@(:cljs [async])]]
             [clojure.core.async :as async :refer [<! >! go chan close! alt! timeout chan close! take! to-chan! put! pub sub onto-chan!
                                                   #?@(:clj [<!! >!!])]]
-            [superv.async :refer [<? <?- >? S go-try go-try- <<! <<? <?* concat>> partition-all>> count> pmap>> alt? alts? restarting-supervisor go-super go-for map->TrackingSupervisor on-abort put? chan-super go-loop-try go-loop-try- go-loop-super
-                                  #?@(:clj [<<!! <<?? <?? <!!* <??* thread-try thread-super reduce< <?? chan-super])]]))
+            [superv.async :as sv :refer [<? <?- >? S go-try go-try- <<! <<? <?* concat>> partition-all>> count> pmap>> alt? alts? restarting-supervisor go-super go-for map->TrackingSupervisor on-abort put? chan-super go-loop-try go-loop-try- go-loop-super
+                                         #?@(:clj [<<!! <<?? <?? <!!* <??* thread-try thread-super reduce< <?? chan-super])]]))
 
 (defn test-async
   "Asynchronous test awaiting ch to produce a value or close."
@@ -356,6 +356,88 @@
 
 ;; supervisor
 
+(deftest restart-joins-native-work-and-reclaims-errors-after-abort
+  (let [attempts (atom 0) captured (chan 1)
+        release (async/promise-chan) consumer-stopped (async/promise-chan)
+        reports (atom [])
+        result
+        (restarting-supervisor
+         (fn [s]
+           (if (= 1 (swap! attempts inc))
+             (let [native-result
+                   (go-try s
+                           ;; Plain <! models an owned native operation that
+                           ;; cannot return until its physical work finishes.
+                           (<! release)
+                           (throw (ex-info "Late first failure" {:type ::late-first})))
+                   _second-native-result
+                   (go-try s
+                           (<! release)
+                           (throw (ex-info "Late second failure" {:type ::late-second})))
+                   consumer
+                   (go-super s
+                             (try (<? s native-result)
+                                  (finally (put! consumer-stopped true))))]
+               (put! captured s)
+               consumer)
+             (go-super s :recovered)))
+         :retries 1 :delay 0
+         :log-fn (fn [_ event] (swap! reports conj event)))]
+    (test-async
+     (go
+       (let [s (<! captured)]
+         (put! (sv/-error s) (ex-info "Connection failed" {:type ::connection}))
+         (<! consumer-stopped)
+         (is (= 1 @attempts) "Abort must not release physical ownership")
+         (is (seq @(:registered s)) "Native work remains registered until it returns")
+         (put! release true)
+         (let [[value port] (async/alts! [result (timeout 10000)])]
+           (is (= result port) "Abandoned late exceptions must not deadlock restart")
+           (is (= :recovered value))
+           (is (= 2 @attempts))
+           (is (empty? @(:registered s)))
+           (is (empty? @(:pending-exceptions s)))
+           (is (= #{::late-first ::late-second}
+                  (into #{} (keep #(some-> % :error ex-data :type)) @reports)))
+           ;; Even a failing regression must clean up its own supervisor;
+           ;; this is never a recovery policy for production native work.
+           (when-not (= result port)
+             (doseq [error (keys @(:pending-exceptions s))]
+               (sv/-free-exception s error)))))))))
+
+(deftest exhausted-restart-drains-late-error-and-preserves-trigger
+  (let [attempts (atom 0) captured (chan 1)
+        release (async/promise-chan) stopped (async/promise-chan)
+        trigger (ex-info "Original connection failure" {:type ::original})
+        result (restarting-supervisor
+                (fn [s]
+                  (swap! attempts inc)
+                  (let [native (go-try s
+                                       (<! release)
+                                       (throw (ex-info "Late failure" {:type ::late})))
+                        consumer (go-super s
+                                           (try (<? s native)
+                                                (finally (put! stopped true))))]
+                    (put! captured s)
+                    consumer))
+                :retries 0 :log-fn (fn [_ _]))]
+    (test-async
+     (go
+       (let [s (<! captured)]
+         (put! (sv/-error s) trigger)
+         (<! stopped)
+         (is (seq @(:registered s)))
+         (put! release true)
+         (let [[value port] (async/alts! [result (timeout 10000)])]
+           (is (= result port))
+           (is (identical? trigger value))
+           (is (= 1 @attempts))
+           (is (empty? @(:registered s)))
+           (is (empty? @(:pending-exceptions s)))
+           (when-not (= result port)
+             (doseq [error (keys @(:pending-exceptions s))]
+               (sv/-free-exception s error)))))))))
+
 (deftest test-supervisor
   (test-async
    (do
@@ -375,8 +457,8 @@
                          (go-try S
                                  (try-fn S) ;; should trigger restart after max 2*stale-timeout
                                  42))]
-          (go (is (thrown? #?(:clj Exception :cljs js/Error))
-                  (<? S (restarting-supervisor start-fn :retries 3 :stale-timeout 10)))))))))
+          (go (is (thrown? #?(:clj Exception :cljs js/Error)
+                           (<? S (restarting-supervisor start-fn :retries 3 :stale-timeout 10))))))))))
 
 #_(deftest test-recover-publication
     (let [recovered-publication? (atom false)]
